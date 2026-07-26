@@ -1,0 +1,11 @@
+[project]
+name = "modelrailroadops"
+version = "1.0.0"
+description = "Model Railroad Operations Manager"
+requires-python = ">=3.13"
+
+[tool.black]
+line-length = 88
+
+[tool.ruff]
+line-length = 88

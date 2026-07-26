@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1400</width>
+    <width>1200</width>
     <height>800</height>
    </rect>
   </property>
@@ -14,101 +14,36 @@
    <string>Model Railroad Operations Manager</string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <widget class="QTabWidget" name="Dashboard">
+   <widget class="QTabWidget" name="mainTabs">
     <property name="geometry">
      <rect>
-      <x>490</x>
-      <y>450</y>
+      <x>480</x>
+      <y>240</y>
       <width>127</width>
       <height>80</height>
      </rect>
     </property>
-    <widget class="QWidget" name="tab">
+    <widget class="QWidget" name="Dashboard">
      <attribute name="title">
       <string>Tab 1</string>
      </attribute>
     </widget>
-    <widget class="QWidget" name="tab_2">
+    <widget class="QWidget" name="Cars">
      <attribute name="title">
-      <string>Tab 2</string>
+      <string>Page</string>
      </attribute>
     </widget>
-   </widget>
-   <widget class="QTabWidget" name="Industries">
-    <property name="geometry">
-     <rect>
-      <x>720</x>
-      <y>230</y>
-      <width>127</width>
-      <height>80</height>
-     </rect>
-    </property>
-    <widget class="QWidget" name="tab_3">
+    <widget class="QWidget" name="Industries">
      <attribute name="title">
-      <string>Tab 1</string>
+      <string>Page</string>
      </attribute>
     </widget>
-    <widget class="QWidget" name="tab_4">
+    <widget class="QWidget" name="Trains">
      <attribute name="title">
-      <string>Tab 2</string>
+      <string>Page</string>
      </attribute>
     </widget>
-   </widget>
-   <widget class="QTabWidget" name="Cars">
-    <property name="geometry">
-     <rect>
-      <x>310</x>
-      <y>200</y>
-      <width>127</width>
-      <height>80</height>
-     </rect>
-    </property>
-    <widget class="QWidget" name="tab_5">
-     <attribute name="title">
-      <string>Tab 1</string>
-     </attribute>
-    </widget>
-    <widget class="QWidget" name="tab_6">
-     <attribute name="title">
-      <string>Tab 2</string>
-     </attribute>
-    </widget>
-   </widget>
-   <widget class="QTabWidget" name="Locomotives">
-    <property name="geometry">
-     <rect>
-      <x>800</x>
-      <y>430</y>
-      <width>127</width>
-      <height>80</height>
-     </rect>
-    </property>
-    <widget class="QWidget" name="tab_7">
-     <attribute name="title">
-      <string>Tab 1</string>
-     </attribute>
-    </widget>
-    <widget class="QWidget" name="tab_8">
-     <attribute name="title">
-      <string>Tab 2</string>
-     </attribute>
-    </widget>
-   </widget>
-   <widget class="QTabWidget" name="Trains">
-    <property name="geometry">
-     <rect>
-      <x>210</x>
-      <y>440</y>
-      <width>127</width>
-      <height>80</height>
-     </rect>
-    </property>
-    <widget class="QWidget" name="tab_9">
-     <attribute name="title">
-      <string>Tab 1</string>
-     </attribute>
-    </widget>
-    <widget class="QWidget" name="tab_10">
+    <widget class="QWidget" name="Locomotives">
      <attribute name="title">
       <string>Tab 2</string>
      </attribute>
@@ -120,7 +55,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1400</width>
+     <width>1200</width>
      <height>21</height>
     </rect>
    </property>
