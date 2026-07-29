@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
 )
 
 from modelrailroadops.services.car_service import CarService
-
+from modelrailroadops.ui.dialogs.add_car_dialog import AddCarDialog
 
 class RosterTab(QWidget):
 
@@ -37,6 +37,7 @@ class RosterTab(QWidget):
         layout.addWidget(self.table)
 
         self.refresh()
+        self.add_button.clicked.connect(self.add_car)
 
     def refresh(self):
 
@@ -69,15 +70,15 @@ class RosterTab(QWidget):
                 3,
                 QTableWidgetItem(car.car_type),
             )
-
-            self.table.setItem(
-                row,
-                4,
-                QTableWidgetItem(car.status),
-            )
-
             self.table.setItem(
                 row,
                 5,
                 QTableWidgetItem(car.location),
             )
+
+    def add_car(self):
+        dialog = AddCarDialog(self)
+
+        if dialog.exec():
+            self.refresh()
+            
