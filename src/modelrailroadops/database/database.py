@@ -1,8 +1,8 @@
 from pathlib import Path
-import modelrailroadops.models.railroad
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-
+import modelrailroadops.models
 from modelrailroadops.database.base import Base
 
 # Database location

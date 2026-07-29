@@ -1,10 +1,10 @@
 import sys
-from PySide6.QtWidgets import QApplication
-from database import initialize_database
-from ui.main_window import MainWindow
+from pathlib import Path
 
-initialize_database()
-app=QApplication(sys.argv)
-w=MainWindow()
-w.show()
-sys.exit(app.exec())
+# Tell Python where the application package is
+sys.path.insert(0, str(Path(__file__).parent / "src"))
+
+from modelrailroadops.__main__ import main
+
+if __name__ == "__main__":
+    raise SystemExit(main())
