@@ -23,6 +23,15 @@ class CarService:
         with SessionLocal() as session:
             return session.get(Car, car_id)
 
+    @staticmethod
+    def get_by_reporting_mark_and_number(reporting_mark, number):
+        with SessionLocal() as session:
+            return session.execute(
+                select(Car).where(
+                    Car.reporting_mark == reporting_mark,
+                    Car.number == number,
+                )
+            ).scalar_one_or_none()
 
     @staticmethod
     def add(

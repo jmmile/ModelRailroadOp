@@ -13,8 +13,10 @@ from modelrailroadops.services.car_service import CarService
 
 class AddCarDialog(QDialog):
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, car=None):
         super().__init__(parent)
+
+        self.car = car
 
         self.setWindowTitle("Add Freight Car")
         self.resize(400, 250)
@@ -77,18 +79,43 @@ class AddCarDialog(QDialog):
 
         layout.addLayout(buttons)
 
+        # Populate the fields when editing
+        if self.car:
+            self.reporting_mark.setText(self.car.reporting_mark)
+            self.number.setText(self.car.number)
+            self.owner.setText(self.car.owner)
+            self.car_type.setCurrentText(self.car.car_type)
+            self.status.setCurrentText(self.car.status)
+            self.location.setText(self.car.location)
+
+            self.setWindowTitle("Edit Freight Car")
+
         self.cancel_button.clicked.connect(self.reject)
         self.save_button.clicked.connect(self.save)
 
     def save(self):
 
-        CarService.add(
-            reporting_mark=self.reporting_mark.text().strip(),
-            number=self.number.text().strip(),
-            owner=self.owner.text().strip(),
-            car_type=self.car_type.currentText(),
-            status=self.status.currentText(),
-            location=self.location.text().strip(),
-        )
+        if self.car:
+
+            CarService.update(
+                car_id=self.car.id,
+                reporting_mark=self.reporting_mark.text().strip(),
+                number=self.number.text().strip(),
+                owner=self.owner.text().strip(),
+                car_type=self.car_type.currentText(),
+                status=self.status.currentText(),
+                location=self.location.text().strip(),
+            )
+
+        else:
+
+            CarService.add(
+                reporting_mark=self.reporting_mark.text().strip(),
+                number=self.number.text().strip(),
+                owner=self.owner.text().strip(),
+                car_type=self.car_type.currentText(),
+                status=self.status.currentText(),
+                location=self.location.text().strip(),
+            )
 
         self.accept()
