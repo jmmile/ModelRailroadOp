@@ -1,0 +1,7 @@
+Reporting Mark,Number,Owner,Type,Status,Location
+ATSF,123456,Santa Fe,Boxcar,Active,Yard A
+BN,45624,BNSF,Boxcar,Empty,Outbound Cassette
+SP,987654,Southern Pacific,Covered Hopper,Available,Yard B
+TX,29515,Texaco,Tank Car,Loaded,Pemco Refinery
+UP,1776,Union Pacific,Boxcar,Interchange Track,Track 1
+UP,19999,Union Pacific,Gondola,Interchange Track,Portland Yard
