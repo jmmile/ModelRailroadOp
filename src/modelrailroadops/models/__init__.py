@@ -1,9 +1,9 @@
-from .railroad import Railroad
-from .car import Car
-from .industry import Industry
-from .industry_track import IndustryTrack
+from modelrailroadops.models.car import Car
+from modelrailroadops.models.industry import Industry
+from modelrailroadops.models.industry_track import IndustryTrack
 
 __all__ = [
-    "Railroad",
     "Car",
+    "Industry",
+    "IndustryTrack",
 ]

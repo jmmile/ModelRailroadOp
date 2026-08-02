@@ -9,8 +9,7 @@ class IndustryTableModel(QAbstractTableModel):
         "Name",
         "Railroad",
         "Location",
-        "Track",
-        "Spots",
+        "Tracks",
         "Notes",
     ]
 
@@ -55,12 +54,13 @@ class IndustryTableModel(QAbstractTableModel):
                     return industry.location
 
                 case 3:
-                    return industry.track
+                    return ", ".join(
+                        track.name
+                        for track in industry.tracks
+                    )
 
+                
                 case 4:
-                    return str(industry.spots)
-
-                case 5:
                     return industry.notes
 
         return None

@@ -1,4 +1,5 @@
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from modelrailroadops.database.database import SessionLocal
 from modelrailroadops.models.industry import Industry
@@ -11,7 +12,9 @@ class IndustryService:
         with SessionLocal() as session:
             return (
                 session.execute(
-                    select(Industry).order_by(Industry.name)
+                    select(Industry)
+                    .options(selectinload(Industry.tracks))
+                    .order_by(Industry.name)
                 )
                 .scalars()
                 .all()
@@ -22,8 +25,8 @@ class IndustryService:
         name,
         railroad="",
         location="",
-        track="",
-        spots=1,
+        #track="",
+        #spots=1,
         notes=""
     ):
         with SessionLocal() as session:

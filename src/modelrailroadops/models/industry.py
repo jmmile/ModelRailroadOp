@@ -21,8 +21,8 @@ class Industry(Base):
     # These will be removed after all UI has been migrated
     # to the IndustryTrack model.
     #
-    track: Mapped[str] = mapped_column(String(50))
-    spots: Mapped[int]
+    # track: Mapped[str] = mapped_column(String(50))
+    # spots: Mapped[int]
     
     #
 

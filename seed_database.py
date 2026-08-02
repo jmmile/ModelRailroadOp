@@ -1,11 +1,18 @@
 import sys
 from pathlib import Path
 
+from modelrailroadops.database import session
+from modelrailroadops.services.industry_service import IndustryService
+from modelrailroadops.services.industry_track_service import IndustryTrackService
+
 # Add src folder to Python path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from modelrailroadops.database.database import initialize_database, SessionLocal
 from modelrailroadops.models.car import Car
+
+from modelrailroadops.services.industry_service import IndustryService
+from modelrailroadops.models.industry import Industry
 
 
 def seed_cars():
@@ -52,6 +59,40 @@ def seed_cars():
         session.close()
 
 
+def seed_industries():
+
+    session = SessionLocal()
+
+    try:
+        print("Seeding industries...")
+
+        industry = IndustryService.add(
+            name="Wilhauser Lumber Company",
+            railroad="SP",
+            location="Portland",
+            notes="Lumber loading facility"
+        )
+
+        IndustryTrackService.add(
+            industry_id=industry.id,
+            name="Main Loading Track",
+            spots=6
+        )
+
+        IndustryTrackService.add(
+            industry_id=industry.id,
+            name="Storage Track",
+            spots=4
+        )
+
+        print("Industries seeded successfully!")
+
+    finally:
+        session.close()
+
+
+
 if __name__ == "__main__":
     initialize_database()
     seed_cars()
+    seed_industries()

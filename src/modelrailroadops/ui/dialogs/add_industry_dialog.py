@@ -108,6 +108,11 @@ class AddIndustryDialog(QDialog):
             self.delete_track
         )
         
+        self.track_table.doubleClicked.connect(
+            self.edit_track
+        )
+        
+        
     def load_tracks(self):
 
         tracks = IndustryTrackService.get_by_industry(
@@ -135,8 +140,17 @@ class AddIndustryDialog(QDialog):
 
     def add_track(self):
 
-        if not self.industry:
-            return
+        # If this is a new industry, save it first so it gets an ID
+        if self.industry is None:
+
+            self.industry = IndustryService.add(
+                name=self.name.text().strip(),
+                railroad=self.railroad.text().strip(),
+                location=self.location.text().strip(),
+                notes=self.notes.toPlainText().strip(),
+            )
+
+            self.setWindowTitle("Edit Industry")
 
         dialog = AddIndustryTrackDialog(self)
 
@@ -148,8 +162,42 @@ class AddIndustryDialog(QDialog):
                 spots=dialog.spots.value(),
             )
 
-            self.load_tracks()    
+            self.load_tracks()
+
+    def edit_track(self):
         
+        if not self.industry:
+            return
+
+        row = self.track_table.currentRow()
+
+        if row < 0:
+            return
+
+        tracks = IndustryTrackService.get_by_industry(
+            self.industry.id
+        )
+
+        if row >= len(tracks):
+            return
+        
+        track = tracks[row]
+        
+        print("Selected track:", track.name, track.spots)
+
+        dialog = AddIndustryTrackDialog(self, track)
+
+        if dialog.exec():
+
+            IndustryTrackService.update(
+                track_id=tracks[row].id,
+                name=dialog.name.text().strip(),
+                spots=dialog.spots.value(),
+            )
+
+            self.load_tracks()
+
+       
     def delete_track(self):
 
         if not self.industry:
