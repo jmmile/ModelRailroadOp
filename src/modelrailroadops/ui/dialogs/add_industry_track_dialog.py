@@ -10,46 +10,137 @@ from PySide6.QtWidgets import (
 
 
 class AddIndustryTrackDialog(QDialog):
+    """
+    Dialog used for adding and editing
+    industry tracks.
+    """
 
-    def __init__(self, parent=None, track=None):
+    def __init__(
+        self,
+        track=None,
+        parent=None,
+    ):
         super().__init__(parent)
 
         self.track = track
 
-        self.setWindowTitle("Add Track")
-        self.resize(300, 150)
 
-        layout = QVBoxLayout(self)
+        if self.track:
+            self.setWindowTitle(
+                "Edit Industry Track"
+            )
+        else:
+            self.setWindowTitle(
+                "Add Industry Track"
+            )
+
+
+        self.resize(
+            350,
+            150
+        )
+
+
+        layout = QVBoxLayout(
+            self
+        )
+
 
         form = QFormLayout()
 
+
         self.name = QLineEdit()
 
+
         self.spots = QSpinBox()
-        self.spots.setMinimum(1)
-        self.spots.setMaximum(999)
 
-        form.addRow("Track Name", self.name)
-        form.addRow("Car Spots", self.spots)
+        self.spots.setMinimum(
+            1
+        )
 
-        layout.addLayout(form)
+        self.spots.setMaximum(
+            999
+        )
 
-        buttons = QHBoxLayout()
+        self.spots.setValue(
+            4
+        )
 
-        self.save_button = QPushButton("Save")
-        self.cancel_button = QPushButton("Cancel")
 
-        buttons.addStretch()
-        buttons.addWidget(self.save_button)
-        buttons.addWidget(self.cancel_button)
+        form.addRow(
+            "Track Name",
+            self.name
+        )
 
-        layout.addLayout(buttons)
+        form.addRow(
+            "Number of Spots",
+            self.spots
+        )
+
+
+        layout.addLayout(
+            form
+        )
+
+
+        button_layout = QHBoxLayout()
+
+
+        self.ok_button = QPushButton(
+            "Add"
+        )
+
+        self.cancel_button = QPushButton(
+            "Cancel"
+        )
+
+
+        button_layout.addStretch()
+
+
+        button_layout.addWidget(
+            self.ok_button
+        )
+
+        button_layout.addWidget(
+            self.cancel_button
+        )
+
+
+        layout.addLayout(
+            button_layout
+        )
+
+
+        self.ok_button.clicked.connect(
+            self.accept
+        )
+
+        self.cancel_button.clicked.connect(
+            self.reject
+        )
+
 
         if self.track:
-            self.name.setText(self.track.name)
-            self.spots.setValue(self.track.spots)
+            self.load_track()
 
-            self.setWindowTitle("Edit Track")
 
-        self.save_button.clicked.connect(self.accept)
-        self.cancel_button.clicked.connect(self.reject)
+
+    def load_track(self):
+        """
+        Populate fields from an existing track.
+        """
+
+        self.name.setText(
+            self.track.name
+        )
+
+
+        self.spots.setValue(
+            len(self.track.spots)
+        )
+
+
+        self.ok_button.setText(
+            "Save"
+        )

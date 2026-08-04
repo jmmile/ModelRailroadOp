@@ -1,35 +1,62 @@
-from sqlalchemy import String
-from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.orm import relationship
+from sqlalchemy import String, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from modelrailroadops.database.base import Base
 
 
-
 class Industry(Base):
+
     __tablename__ = "industries"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
 
-    name: Mapped[str] = mapped_column(String(100))
-    railroad: Mapped[str] = mapped_column(String(10))
-    location: Mapped[str] = mapped_column(String(100))
+    __table_args__ = (
+        UniqueConstraint(
+            "name",
+            name="uq_industry_name",
+        ),
+    )
 
 
-    #
-    # Legacy fields.
-    # These will be removed after all UI has been migrated
-    # to the IndustryTrack model.
-    #
-    # track: Mapped[str] = mapped_column(String(50))
-    # spots: Mapped[int]
-    
-    #
+    id: Mapped[int] = mapped_column(
+        primary_key=True
+    )
 
-    notes: Mapped[str] = mapped_column(String(500))
-    
-    tracks = relationship(
+
+    name: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+    )
+
+
+    railroad: Mapped[str] = mapped_column(
+        String(10),
+        nullable=False,
+    )
+
+
+    location: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+    )
+
+
+    notes: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
+    )
+
+
+    # Industry tracks
+    tracks: Mapped[list["IndustryTrack"]] = relationship(
         "IndustryTrack",
         back_populates="industry",
         cascade="all, delete-orphan",
-  )
+        order_by="IndustryTrack.name",
+    )
+
+
+    # Cars assigned to this industry
+    cars: Mapped[list["Car"]] = relationship(
+        "Car",
+        back_populates="industry",
+    )

@@ -1,19 +1,19 @@
 import sys
 from pathlib import Path
 
-# Tell Python where the application package is
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from modelrailroadops.database.base import Base
-from modelrailroadops.database.database import engine
 
-# Import all models so SQLAlchemy knows about them
+# Import all models
 from modelrailroadops.models.car import Car
 from modelrailroadops.models.industry import Industry
 from modelrailroadops.models.industry_track import IndustryTrack
-from modelrailroadops.models.spot import Spot
 
 
-Base.metadata.create_all(bind=engine)
+for table_name, table in Base.metadata.tables.items():
+    print("\nTABLE:", table_name)
 
-print("Database initialized successfully.")
+    print("Constraints:")
+    for constraint in table.constraints:
+        print("  ", constraint)

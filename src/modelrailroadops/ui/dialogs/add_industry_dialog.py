@@ -5,17 +5,19 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QTextEdit,
     QPushButton,
-    QHBoxLayout,
     QTableWidget,
     QTableWidgetItem,
-    QHeaderView,
-        
+    QHBoxLayout,
+    QMessageBox,
 )
 
+from modelrailroadops.services.industry_service import (
+    IndustryService
+)
 
-from modelrailroadops.services.industry_track_service import IndustryTrackService
-
-from modelrailroadops.services.industry_service import IndustryService
+from modelrailroadops.services.industry_track_service import (
+    IndustryTrackService
+)
 
 from modelrailroadops.ui.dialogs.add_industry_track_dialog import (
     AddIndustryTrackDialog
@@ -23,136 +25,262 @@ from modelrailroadops.ui.dialogs.add_industry_track_dialog import (
 
 
 class AddIndustryDialog(QDialog):
+    """
+    Add or edit an industry.
+    """
 
-    def __init__(self, parent=None, industry=None):
+    def __init__(
+        self,
+        parent=None,
+        industry=None,
+    ):
         super().__init__(parent)
 
         self.industry = industry
 
-        self.setWindowTitle("Add Industry")
-        self.resize(500, 350)
 
-        layout = QVBoxLayout(self)
+        self.setWindowTitle(
+            "Add Industry"
+        )
+
+
+        layout = QVBoxLayout(
+            self
+        )
+
 
         form = QFormLayout()
+
 
         self.name = QLineEdit()
         self.railroad = QLineEdit()
         self.location = QLineEdit()
-       
         self.notes = QTextEdit()
 
-        form.addRow("Industry Name", self.name)
-        form.addRow("Railroad", self.railroad)
-        form.addRow("Location", self.location)
-        form.addRow("Notes", self.notes)
 
-        layout.addLayout(form)
+        form.addRow(
+            "Industry Name",
+            self.name
+        )
+
+        form.addRow(
+            "Railroad",
+            self.railroad
+        )
+
+        form.addRow(
+            "Location",
+            self.location
+        )
+
+        form.addRow(
+            "Notes",
+            self.notes
+        )
+
+
+        layout.addLayout(
+            form
+        )
+
+
         self.track_table = QTableWidget()
-        self.track_table.setColumnCount(2)
+
+        self.track_table.setColumnCount(
+            2
+        )
+
         self.track_table.setHorizontalHeaderLabels(
-            ["Track Name", "Spots"]
+            [
+                "Track",
+                "Spots",
+            ]
         )
 
-        self.track_table.horizontalHeader().setSectionResizeMode(
-                QHeaderView.Stretch
+
+        layout.addWidget(
+            self.track_table
         )
 
-        layout.addWidget(self.track_table)
 
-        track_buttons = QHBoxLayout()
-
-        self.add_track_button = QPushButton("Add Track")
-        self.delete_track_button = QPushButton("Delete Track")
-
-        track_buttons.addWidget(self.add_track_button)
-        track_buttons.addWidget(self.delete_track_button)
-        track_buttons.addStretch()
-
-        layout.addLayout(track_buttons)
+        button_layout = QHBoxLayout()
 
 
+        self.add_track_button = QPushButton(
+            "Add Track"
+        )
+
+        self.edit_track_button = QPushButton(
+            "Edit Track"
+        )
+
+        self.delete_track_button = QPushButton(
+            "Delete Track"
+        )
+
+        self.save_button = QPushButton(
+            "Save"
+        )
 
 
-        buttons = QHBoxLayout()
+        button_layout.addWidget(
+            self.add_track_button
+        )
 
-        self.save_button = QPushButton("Save")
-        self.cancel_button = QPushButton("Cancel")
+        button_layout.addWidget(
+            self.edit_track_button
+        )
 
-        buttons.addStretch()
-        buttons.addWidget(self.save_button)
-        buttons.addWidget(self.cancel_button)
-        
+        button_layout.addWidget(
+            self.delete_track_button
+        )
 
-        layout.addLayout(buttons)
+        button_layout.addStretch()
 
-        if self.industry:
+        button_layout.addWidget(
+            self.save_button
+        )
 
-            self.name.setText(self.industry.name)
-            self.railroad.setText(self.industry.railroad)
-            self.location.setText(self.industry.location)
-            self.notes.setPlainText(self.industry.notes)
-            self.load_tracks()
-            
-            self.setWindowTitle("Edit Industry")
 
-        self.cancel_button.clicked.connect(self.reject)
-        self.save_button.clicked.connect(self.save)
-        
-             
+        layout.addLayout(
+            button_layout
+        )
+
+
         self.add_track_button.clicked.connect(
             self.add_track
+        )
+
+        self.edit_track_button.clicked.connect(
+            self.edit_track
         )
 
         self.delete_track_button.clicked.connect(
             self.delete_track
         )
-        
-        self.track_table.doubleClicked.connect(
-            self.edit_track
+
+        self.save_button.clicked.connect(
+            self.save
         )
-        
-        
+
+
+        if self.industry:
+
+            self.load_industry()
+
+
+
+    def load_industry(self):
+        """
+        Load existing industry data.
+        """
+
+        self.name.setText(
+            self.industry.name
+        )
+
+        self.railroad.setText(
+            self.industry.railroad
+        )
+
+        self.location.setText(
+            self.industry.location
+        )
+
+        self.notes.setPlainText(
+            self.industry.notes or ""
+        )
+
+        self.load_tracks()
+
+
+
+    def ensure_saved(self):
+        """
+        Save a new industry before adding tracks.
+        """
+
+        if self.industry:
+            return True
+
+
+        if not self.name.text().strip():
+
+            QMessageBox.warning(
+                self,
+                "Missing Name",
+                "Enter an industry name first."
+            )
+
+            return False
+
+
+        self.industry = IndustryService.add(
+            name=self.name.text().strip(),
+            railroad=self.railroad.text().strip(),
+            location=self.location.text().strip(),
+            notes=self.notes.toPlainText(),
+        )
+
+
+        return True
+
+
+
     def load_tracks(self):
+
+        if not self.industry:
+            return
+
 
         tracks = IndustryTrackService.get_by_industry(
             self.industry.id
         )
 
-        self.track_table.setRowCount(0)
+
+        self.track_table.setRowCount(
+            0
+        )
+
 
         for track in tracks:
 
             row = self.track_table.rowCount()
-            self.track_table.insertRow(row)
+
+            self.track_table.insertRow(
+                row
+            )
+
 
             self.track_table.setItem(
                 row,
                 0,
-                QTableWidgetItem(track.name)
+                QTableWidgetItem(
+                    track.name
+                )
             )
+
 
             self.track_table.setItem(
                 row,
                 1,
-                QTableWidgetItem(str(track.spots))
+                QTableWidgetItem(
+                    str(len(track.spots))
+                )
             )
+
+
 
     def add_track(self):
 
-        # If this is a new industry, save it first so it gets an ID
-        if self.industry is None:
+        if not self.ensure_saved():
+            return
 
-            self.industry = IndustryService.add(
-                name=self.name.text().strip(),
-                railroad=self.railroad.text().strip(),
-                location=self.location.text().strip(),
-                notes=self.notes.toPlainText().strip(),
-            )
 
-            self.setWindowTitle("Edit Industry")
+        dialog = AddIndustryTrackDialog(
+            parent=self
+        )
 
-        dialog = AddIndustryTrackDialog(self)
 
         if dialog.exec():
 
@@ -162,64 +290,75 @@ class AddIndustryDialog(QDialog):
                 spots=dialog.spots.value(),
             )
 
+
             self.load_tracks()
 
+
+
     def edit_track(self):
-        
-        if not self.industry:
-            return
 
         row = self.track_table.currentRow()
 
         if row < 0:
             return
 
+
         tracks = IndustryTrackService.get_by_industry(
             self.industry.id
         )
 
-        if row >= len(tracks):
-            return
-        
-        track = tracks[row]
-        
-        print("Selected track:", track.name, track.spots)
 
-        dialog = AddIndustryTrackDialog(self, track)
+        track = tracks[row]
+
+
+        dialog = AddIndustryTrackDialog(
+            track=track,
+            parent=self
+        )
+
 
         if dialog.exec():
 
             IndustryTrackService.update(
-                track_id=tracks[row].id,
-                name=dialog.name.text().strip(),
-                spots=dialog.spots.value(),
+                track.id,
+                dialog.name.text().strip(),
+                dialog.spots.value(),
             )
+
 
             self.load_tracks()
 
-       
-    def delete_track(self):
 
-        if not self.industry:
-            return
+
+    def delete_track(self):
 
         row = self.track_table.currentRow()
 
         if row < 0:
             return
 
+
         tracks = IndustryTrackService.get_by_industry(
             self.industry.id
         )
 
-        if row >= len(tracks):
-            return
 
-        IndustryTrackService.delete(
-            tracks[row].id
-        )
+        track = tracks[row]
 
-        self.load_tracks()   
+
+        if not IndustryTrackService.delete(
+            track.id
+        ):
+
+            QMessageBox.warning(
+                self,
+                "Cannot Delete",
+                "Track contains assigned cars."
+            )
+
+
+        self.load_tracks()
+
 
 
     def save(self):
@@ -231,16 +370,12 @@ class AddIndustryDialog(QDialog):
                 name=self.name.text().strip(),
                 railroad=self.railroad.text().strip(),
                 location=self.location.text().strip(),
-                notes=self.notes.toPlainText().strip(),
+                notes=self.notes.toPlainText(),
             )
 
         else:
 
-            self.industry = IndustryService.add(
-                name=self.name.text().strip(),
-                railroad=self.railroad.text().strip(),
-                location=self.location.text().strip(),
-                notes=self.notes.toPlainText().strip(),
-            )
+            self.ensure_saved()
+
 
         self.accept()

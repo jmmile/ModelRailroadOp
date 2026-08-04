@@ -1,86 +1,321 @@
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from modelrailroadops.database.database import SessionLocal
+
 from modelrailroadops.models.industry_track import IndustryTrack
+from modelrailroadops.models.spot import Spot
+from modelrailroadops.models.car import Car
 
 
 class IndustryTrackService:
+    """
+    Service methods for managing industry tracks.
+    """
 
     @staticmethod
-    def get_all():
+    def add(
+        industry_id,
+        name,
+        spots=0,
+    ):
+        """
+        Add a new industry track and create spots.
+        """
+
         with SessionLocal() as session:
-            return (
-                session.execute(
-                    select(IndustryTrack)
-                    .order_by(IndustryTrack.name)
+
+            existing = session.execute(
+                select(IndustryTrack).where(
+                    IndustryTrack.industry_id == industry_id,
+                    IndustryTrack.name == name,
                 )
-                .scalars()
-                .all()
-            )
+            ).scalar_one_or_none()
 
-    @staticmethod
-    def get_by_id(track_id):
-        with SessionLocal() as session:
-            return session.get(IndustryTrack, track_id)
+            if existing:
+                return existing
 
-    @staticmethod
-    def get_by_industry(industry_id):
-        with SessionLocal() as session:
-            return (
-                session.execute(
-                    select(IndustryTrack)
-                    .where(
-                        IndustryTrack.industry_id == industry_id
-                    )
-                    .order_by(IndustryTrack.name)
-                )
-                .scalars()
-                .all()
-            )
 
-    @staticmethod
-    def add(industry_id, name, spots):
-        with SessionLocal() as session:
             track = IndustryTrack(
                 industry_id=industry_id,
                 name=name,
-                spots=spots,
             )
 
             session.add(track)
+
+            session.flush()
+
+
+            for number in range(1, spots + 1):
+
+                session.add(
+                    Spot(
+                        track_id=track.id,
+                        spot_number=number,
+                    )
+                )
+
+
             session.commit()
+
             session.refresh(track)
 
             return track
 
-    @staticmethod
-    def update(track_id, name=None, spots=None):
-        with SessionLocal() as session:
-            track = session.get(IndustryTrack, track_id)
 
-            if not track:
+    @staticmethod
+    def update(
+        track_id,
+        name,
+        spots,
+    ):
+        """
+        Update an existing track.
+
+        Adjusts the number of spots.
+        Does not remove occupied spots.
+        """
+
+        with SessionLocal() as session:
+
+            track = session.get(
+                IndustryTrack,
+                track_id
+            )
+
+            if track is None:
                 return None
 
-            if name is not None:
-                track.name = name
 
-            if spots is not None:
-                track.spots = spots
+            track.name = name
+
+
+            current_count = len(
+                track.spots
+            )
+
+
+            # Add spots
+            if spots > current_count:
+
+                for number in range(
+                    current_count + 1,
+                    spots + 1
+                ):
+
+                    session.add(
+                        Spot(
+                            track_id=track.id,
+                            spot_number=number,
+                        )
+                    )
+
+
+            # Remove spots
+            elif spots < current_count:
+
+                remove_count = current_count - spots
+
+                removable_spots = (
+                    session.execute(
+                        select(Spot)
+                        .where(
+                            Spot.track_id == track.id
+                        )
+                        .order_by(
+                            Spot.spot_number.desc()
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+
+
+                removed = 0
+
+
+                for spot in removable_spots:
+
+                    occupied = (
+                        session.execute(
+                            select(Car)
+                            .where(
+                                Car.spot_id == spot.id
+                            )
+                        )
+                        .scalar_one_or_none()
+                    )
+
+
+                    if occupied:
+                        continue
+
+
+                    session.delete(
+                        spot
+                    )
+
+                    removed += 1
+
+
+                    if removed == remove_count:
+                        break
+
+
+                if removed != remove_count:
+
+                    session.rollback()
+
+                    return None
+
 
             session.commit()
-            session.refresh(track)
 
-            return track
+            return IndustryTrackService.get_by_id(
+                track_id
+            )
+
 
     @staticmethod
-    def delete(track_id):
-        with SessionLocal() as session:
-            track = session.get(IndustryTrack, track_id)
+    def get_by_id(
+        track_id
+    ):
+        """
+        Return one track with related
+        spots and cars loaded.
+        """
 
-            if not track:
+        with SessionLocal() as session:
+
+            return (
+                session.execute(
+                    select(IndustryTrack)
+                    .options(
+                        selectinload(
+                            IndustryTrack.spots
+                        ),
+                        selectinload(
+                            IndustryTrack.cars
+                        ),
+                    )
+                    .where(
+                        IndustryTrack.id == track_id
+                    )
+                )
+                .scalars()
+                .unique()
+                .one_or_none()
+            )
+
+
+    @staticmethod
+    def get_all():
+        """
+        Return all industry tracks.
+        """
+
+        with SessionLocal() as session:
+
+            return (
+                session.execute(
+                    select(IndustryTrack)
+                    .options(
+                        selectinload(
+                            IndustryTrack.spots
+                        ),
+                        selectinload(
+                            IndustryTrack.cars
+                        ),
+                        selectinload(
+                            IndustryTrack.industry
+                        ),
+                    )
+                    .order_by(
+                        IndustryTrack.name
+                    )
+                )
+                .scalars()
+                .unique()
+                .all()
+            )
+
+
+    @staticmethod
+    def get_by_industry(
+        industry_id
+    ):
+        """
+        Return tracks for an industry
+        with spots and cars loaded.
+        """
+
+        with SessionLocal() as session:
+
+            return (
+                session.execute(
+                    select(IndustryTrack)
+                    .options(
+                        selectinload(
+                            IndustryTrack.spots
+                        ),
+                        selectinload(
+                            IndustryTrack.cars
+                        ),
+                    )
+                    .where(
+                        IndustryTrack.industry_id == industry_id
+                    )
+                    .order_by(
+                        IndustryTrack.name
+                    )
+                )
+                .scalars()
+                .unique()
+                .all()
+            )
+
+
+    @staticmethod
+    def delete(
+        track_id
+    ):
+        """
+        Delete a track.
+
+        Prevent deletion if a car is assigned.
+        """
+
+        with SessionLocal() as session:
+
+            track = session.get(
+                IndustryTrack,
+                track_id
+            )
+
+            if track is None:
                 return False
 
-            session.delete(track)
+
+            occupied = (
+                session.execute(
+                    select(Car)
+                    .where(
+                        Car.track_id == track_id
+                    )
+                )
+                .scalar_one_or_none()
+            )
+
+
+            if occupied:
+
+                return False
+
+
+            session.delete(
+                track
+            )
+
             session.commit()
 
             return True
