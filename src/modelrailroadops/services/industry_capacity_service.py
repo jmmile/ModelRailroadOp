@@ -10,10 +10,6 @@ from modelrailroadops.models.spot import Spot
 
 
 class IndustryService:
-    """
-    Handles industry database operations.
-    """
-
 
 
     @staticmethod
@@ -21,7 +17,7 @@ class IndustryService:
 
         with SessionLocal() as session:
 
-            industries = (
+            return (
                 session.execute(
                     select(Industry)
                     .options(
@@ -44,53 +40,35 @@ class IndustryService:
             )
 
 
-            #
-            # Calculate capacity while session
-            # is still active.
-            #
 
-            for industry in industries:
+    @staticmethod
+    def get_by_id(
+        industry_id
+    ):
 
-                total_spots = 0
+        with SessionLocal() as session:
 
-                occupied_spots = 0
-
-
-                for track in industry.tracks:
-
-                    for spot in track.spots:
-
-                        total_spots += 1
-
-
-                        if spot.car is not None:
-
-                            occupied_spots += 1
-
-
-
-                industry.capacity_total = total_spots
-
-                industry.capacity_occupied = occupied_spots
-
-                industry.capacity_available = (
-                    total_spots - occupied_spots
-                )
-
-
-                if total_spots:
-
-                    industry.capacity_percent = round(
-                        occupied_spots / total_spots * 100
+            return (
+                session.execute(
+                    select(Industry)
+                    .options(
+                        selectinload(
+                            Industry.tracks
+                        )
+                        .selectinload(
+                            IndustryTrack.spots
+                        )
+                        .selectinload(
+                            Spot.car
+                        )
                     )
-
-                else:
-
-                    industry.capacity_percent = 0
-
-
-
-            return industries
+                    .where(
+                        Industry.id == industry_id
+                    )
+                )
+                .scalars()
+                .first()
+            )
 
 
 
@@ -123,10 +101,15 @@ class IndustryService:
 
 
             industry = Industry(
+
                 name=name,
+
                 railroad=railroad,
+
                 location=location,
+
                 notes=notes,
+
             )
 
 
@@ -211,6 +194,7 @@ class IndustryService:
             session.delete(
                 industry
             )
+
 
             session.commit()
 

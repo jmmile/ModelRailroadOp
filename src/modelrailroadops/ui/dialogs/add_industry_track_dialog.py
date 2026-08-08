@@ -20,37 +20,43 @@ class AddIndustryTrackDialog(QDialog):
         track=None,
         parent=None,
     ):
+
         super().__init__(parent)
 
         self.track = track
 
-
         if self.track:
+
             self.setWindowTitle(
                 "Edit Industry Track"
             )
+
         else:
+
             self.setWindowTitle(
                 "Add Industry Track"
             )
-
 
         self.resize(
             350,
             150
         )
 
-
         layout = QVBoxLayout(
             self
         )
 
-
         form = QFormLayout()
 
+        #
+        # Track name
+        #
 
         self.name = QLineEdit()
 
+        #
+        # Number of spots
+        #
 
         self.spots = QSpinBox()
 
@@ -66,7 +72,6 @@ class AddIndustryTrackDialog(QDialog):
             4
         )
 
-
         form.addRow(
             "Track Name",
             self.name
@@ -77,14 +82,15 @@ class AddIndustryTrackDialog(QDialog):
             self.spots
         )
 
-
         layout.addLayout(
             form
         )
 
+        #
+        # Buttons
+        #
 
         button_layout = QHBoxLayout()
-
 
         self.ok_button = QPushButton(
             "Add"
@@ -94,9 +100,7 @@ class AddIndustryTrackDialog(QDialog):
             "Cancel"
         )
 
-
         button_layout.addStretch()
-
 
         button_layout.addWidget(
             self.ok_button
@@ -106,11 +110,13 @@ class AddIndustryTrackDialog(QDialog):
             self.cancel_button
         )
 
-
         layout.addLayout(
             button_layout
         )
 
+        #
+        # Signals
+        #
 
         self.ok_button.clicked.connect(
             self.accept
@@ -120,11 +126,13 @@ class AddIndustryTrackDialog(QDialog):
             self.reject
         )
 
+        #
+        # Edit mode
+        #
 
         if self.track:
+
             self.load_track()
-
-
 
     def load_track(self):
         """
@@ -135,11 +143,14 @@ class AddIndustryTrackDialog(QDialog):
             self.track.name
         )
 
+        #
+        # Existing spots determine the
+        # current number of spots.
+        #
 
         self.spots.setValue(
             len(self.track.spots)
         )
-
 
         self.ok_button.setText(
             "Save"

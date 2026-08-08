@@ -1,7 +1,16 @@
-from sqlalchemy import ForeignKey, String
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import (
+    ForeignKey,
+    String,
+)
+
+from sqlalchemy.orm import (
+    Mapped,
+    mapped_column,
+    relationship,
+)
 
 from modelrailroadops.database.base import Base
+
 
 
 class Car(Base):
@@ -38,6 +47,18 @@ class Car(Base):
     )
 
 
+    #
+    # Car length in feet
+    #
+    # Used for spot restrictions
+    # and operational validation.
+    #
+
+    length: Mapped[int | None] = mapped_column(
+        nullable=True,
+    )
+
+
     status: Mapped[str] = mapped_column(
         String(30),
         nullable=False,
@@ -50,7 +71,9 @@ class Car(Base):
     )
 
 
+    #
     # Assigned operating location
+    #
 
     industry_id: Mapped[int | None] = mapped_column(
         ForeignKey("industries.id"),
@@ -70,7 +93,9 @@ class Car(Base):
     )
 
 
+    #
     # Relationships
+    #
 
     industry: Mapped["Industry"] = relationship(
         "Industry",
@@ -87,4 +112,11 @@ class Car(Base):
     spot: Mapped["Spot"] = relationship(
         "Spot",
         back_populates="car",
+    )
+
+
+    movements: Mapped[list["CarMovement"]] = relationship(
+        "CarMovement",
+        back_populates="car",
+        cascade="all, delete-orphan",
     )

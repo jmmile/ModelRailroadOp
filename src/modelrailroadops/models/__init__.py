@@ -3,6 +3,7 @@ from modelrailroadops.models.industry import Industry
 from modelrailroadops.models.industry_track import IndustryTrack
 from modelrailroadops.models.spot import Spot
 from modelrailroadops.models.railroad import Railroad
+from modelrailroadops.models.car_movement import CarMovement
 
 
 __all__ = [
@@ -11,4 +12,5 @@ __all__ = [
     "IndustryTrack",
     "Spot",
     "Railroad",
+    "CarMovement",
 ]

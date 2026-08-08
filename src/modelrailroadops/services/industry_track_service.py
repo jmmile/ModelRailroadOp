@@ -1,3 +1,4 @@
+#```python
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
@@ -35,7 +36,6 @@ class IndustryTrackService:
             if existing:
                 return existing
 
-
             track = IndustryTrack(
                 industry_id=industry_id,
                 name=name,
@@ -44,7 +44,6 @@ class IndustryTrackService:
             session.add(track)
 
             session.flush()
-
 
             for number in range(1, spots + 1):
 
@@ -55,12 +54,11 @@ class IndustryTrackService:
                     )
                 )
 
-
             session.commit()
 
-            session.refresh(track)
-
-            return track
+            return IndustryTrackService.get_by_id(
+                track.id
+            )
 
 
     @staticmethod
@@ -86,16 +84,23 @@ class IndustryTrackService:
             if track is None:
                 return None
 
-
             track.name = name
 
+            current_count = session.execute(
+                select(Spot)
+                .where(
+                    Spot.track_id == track.id
+                )
+            ).scalars().all()
 
             current_count = len(
-                track.spots
+                current_count
             )
 
-
+            #
             # Add spots
+            #
+
             if spots > current_count:
 
                 for number in range(
@@ -110,11 +115,15 @@ class IndustryTrackService:
                         )
                     )
 
-
+            #
             # Remove spots
+            #
+
             elif spots < current_count:
 
-                remove_count = current_count - spots
+                remove_count = (
+                    current_count - spots
+                )
 
                 removable_spots = (
                     session.execute(
@@ -130,9 +139,7 @@ class IndustryTrackService:
                     .all()
                 )
 
-
                 removed = 0
-
 
                 for spot in removable_spots:
 
@@ -146,10 +153,8 @@ class IndustryTrackService:
                         .scalar_one_or_none()
                     )
 
-
                     if occupied:
                         continue
-
 
                     session.delete(
                         spot
@@ -157,10 +162,8 @@ class IndustryTrackService:
 
                     removed += 1
 
-
                     if removed == remove_count:
                         break
-
 
                 if removed != remove_count:
 
@@ -168,12 +171,11 @@ class IndustryTrackService:
 
                     return None
 
-
             session.commit()
 
-            return IndustryTrackService.get_by_id(
-                track_id
-            )
+        return IndustryTrackService.get_by_id(
+            track_id
+        )
 
 
     @staticmethod
@@ -182,7 +184,7 @@ class IndustryTrackService:
     ):
         """
         Return one track with related
-        spots and cars loaded.
+        industry, spots, and spot cars loaded.
         """
 
         with SessionLocal() as session:
@@ -193,9 +195,16 @@ class IndustryTrackService:
                     .options(
                         selectinload(
                             IndustryTrack.spots
+                        ).selectinload(
+                            Spot.car
                         ),
+
                         selectinload(
                             IndustryTrack.cars
+                        ),
+
+                        selectinload(
+                            IndustryTrack.industry
                         ),
                     )
                     .where(
@@ -211,7 +220,8 @@ class IndustryTrackService:
     @staticmethod
     def get_all():
         """
-        Return all industry tracks.
+        Return all industry tracks with
+        spots and their cars loaded.
         """
 
         with SessionLocal() as session:
@@ -222,10 +232,14 @@ class IndustryTrackService:
                     .options(
                         selectinload(
                             IndustryTrack.spots
+                        ).selectinload(
+                            Spot.car
                         ),
+
                         selectinload(
                             IndustryTrack.cars
                         ),
+
                         selectinload(
                             IndustryTrack.industry
                         ),
@@ -246,7 +260,7 @@ class IndustryTrackService:
     ):
         """
         Return tracks for an industry
-        with spots and cars loaded.
+        with spots and their cars loaded.
         """
 
         with SessionLocal() as session:
@@ -257,9 +271,16 @@ class IndustryTrackService:
                     .options(
                         selectinload(
                             IndustryTrack.spots
+                        ).selectinload(
+                            Spot.car
                         ),
+
                         selectinload(
                             IndustryTrack.cars
+                        ),
+
+                        selectinload(
+                            IndustryTrack.industry
                         ),
                     )
                     .where(
@@ -295,7 +316,6 @@ class IndustryTrackService:
             if track is None:
                 return False
 
-
             occupied = (
                 session.execute(
                     select(Car)
@@ -306,11 +326,8 @@ class IndustryTrackService:
                 .scalar_one_or_none()
             )
 
-
             if occupied:
-
                 return False
-
 
             session.delete(
                 track
@@ -319,3 +336,4 @@ class IndustryTrackService:
             session.commit()
 
             return True
+#```
