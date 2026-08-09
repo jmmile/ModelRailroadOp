@@ -1,3 +1,4 @@
+
 import csv
 
 from PySide6.QtCore import (
@@ -11,6 +12,9 @@ from modelrailroadops.services.car_service import CarService
 
 
 class CarTableModel(QAbstractTableModel):
+    """
+    Table model for the freight car roster.
+    """
 
     HEADERS = [
         "Reporting Mark",
@@ -22,7 +26,6 @@ class CarTableModel(QAbstractTableModel):
         "Location",
     ]
 
-
     def __init__(self):
 
         super().__init__()
@@ -31,7 +34,9 @@ class CarTableModel(QAbstractTableModel):
 
         self.refresh()
 
-
+    # ---------------------------------------------------------
+    # Refresh
+    # ---------------------------------------------------------
 
     def refresh(self):
 
@@ -41,7 +46,9 @@ class CarTableModel(QAbstractTableModel):
 
         self.endResetModel()
 
-
+    # ---------------------------------------------------------
+    # Import CSV
+    # ---------------------------------------------------------
 
     def import_from_csv(
         self,
@@ -51,44 +58,150 @@ class CarTableModel(QAbstractTableModel):
         added = 0
         skipped = 0
 
-
         with open(
             filename,
             newline="",
-            encoding="utf-8"
+            encoding="utf-8-sig"
         ) as file:
 
             reader = csv.DictReader(file)
 
-
             for row in reader:
+
+                #
+                # Normalize CSV column names.
+                #
+                # This allows both:
+                #
+                # Reporting Mark
+                # reporting_mark
+                #
+                # and both:
+                #
+                # Type
+                # car_type
+                #
+
+                normalized_row = {}
+
+                for key, value in row.items():
+
+                    if key is None:
+                        continue
+
+                    normalized_key = (
+                        key.strip()
+                        .lower()
+                        .replace(
+                            " ",
+                            "_"
+                        )
+                    )
+
+                    normalized_row[
+                        normalized_key
+                    ] = (
+                        value.strip()
+                        if isinstance(
+                            value,
+                            str
+                        )
+                        else value
+                    )
 
                 try:
 
-                    car = CarService.add(
-                        reporting_mark=row["reporting_mark"],
-                        number=row["number"],
-                        owner=row.get(
-                            "owner",
+                    reporting_mark = (
+                        normalized_row.get(
+                            "reporting_mark",
                             ""
-                        ),
-                        car_type=row.get(
-                            "car_type",
-                            ""
-                        ),
-                        length=row.get(
-                            "length"
-                        ),
-                        status=row.get(
-                            "status",
-                            "Available"
-                        ),
-                        location=row.get(
-                            "location",
-                            ""
-                        ),
+                        )
                     )
 
+                    number = (
+                        normalized_row.get(
+                            "number",
+                            ""
+                        )
+                    )
+
+                    owner = (
+                        normalized_row.get(
+                            "owner",
+                            ""
+                        )
+                    )
+
+                    car_type = (
+                        normalized_row.get(
+                            "car_type",
+                            ""
+                        )
+                        or normalized_row.get(
+                            "type",
+                            ""
+                        )
+                    )
+
+                    length = (
+                        normalized_row.get(
+                            "length"
+                        )
+                    )
+
+                    status = (
+                        normalized_row.get(
+                            "status",
+                            "Available"
+                        )
+                        or "Available"
+                    )
+
+                    location = (
+                        normalized_row.get(
+                            "location",
+                            ""
+                        )
+                    )
+
+                    #
+                    # Required fields.
+                    #
+
+                    if not reporting_mark or not number:
+
+                        skipped += 1
+
+                        continue
+
+                    #
+                    # Convert length to an integer
+                    # when supplied.
+                    #
+
+                    if length:
+
+                        length = int(
+                            length
+                        )
+
+                    else:
+
+                        length = None
+
+                    #
+                    # Add the car.
+                    #
+
+                    car = CarService.add(
+                        reporting_mark=reporting_mark,
+                        number=number,
+                        owner=owner,
+                        car_type=car_type,
+                        length=length,
+                        status=status,
+                        location=location,
+                    )
 
                     if car:
 
@@ -96,39 +209,105 @@ class CarTableModel(QAbstractTableModel):
 
                     else:
 
-                        skipped += 1
+                        #
+                        # Car already exists.
+                        #
 
+                        skipped += 1
 
                 except Exception:
 
                     skipped += 1
 
-
+        #
+        # Reload the table from the database.
+        #
 
         self.refresh()
 
-
         return added, skipped
 
+    # ---------------------------------------------------------
+    # Export CSV
+    # ---------------------------------------------------------
 
+    def export_to_csv(
+        self,
+        filename
+    ):
+
+        with open(
+            filename,
+            "w",
+            newline="",
+            encoding="utf-8"
+        ) as file:
+
+            writer = csv.writer(file)
+
+            #
+            # CSV column names
+            #
+
+            writer.writerow([
+                "Reporting Mark",
+                "Number",
+                "Owner",
+                "Type",
+                "Length",
+                "Status",
+                "Location",
+            ])
+
+            #
+            # Write every car.
+            #
+
+            for car in self.cars:
+
+                writer.writerow([
+                    car.reporting_mark,
+                    car.number,
+                    car.owner,
+                    car.car_type,
+                    getattr(
+                        car,
+                        "length",
+                        ""
+                    ),
+                    car.status,
+                    car.location,
+                ])
+
+    # ---------------------------------------------------------
+    # Row count
+    # ---------------------------------------------------------
 
     def rowCount(
         self,
         parent=None
     ):
 
-        return len(self.cars)
+        return len(
+            self.cars
+        )
 
-
+    # ---------------------------------------------------------
+    # Column count
+    # ---------------------------------------------------------
 
     def columnCount(
         self,
         parent=None
     ):
 
-        return len(self.HEADERS)
+        return len(
+            self.HEADERS
+        )
 
-
+    # ---------------------------------------------------------
+    # Header data
+    # ---------------------------------------------------------
 
     def headerData(
         self,
@@ -141,15 +320,17 @@ class CarTableModel(QAbstractTableModel):
 
             return None
 
-
         if orientation == Qt.Horizontal:
 
-            return self.HEADERS[section]
-
+            return self.HEADERS[
+                section
+            ]
 
         return section + 1
 
-
+    # ---------------------------------------------------------
+    # Table data
+    # ---------------------------------------------------------
 
     def data(
         self,
@@ -161,11 +342,9 @@ class CarTableModel(QAbstractTableModel):
 
             return None
 
-
         car = self.cars[
             index.row()
         ]
-
 
         STATUS_MAP = {
 
@@ -196,11 +375,9 @@ class CarTableModel(QAbstractTableModel):
 
         }
 
-
         key = (
             car.status or ""
         ).strip().lower()
-
 
         emoji, display = STATUS_MAP.get(
             key,
@@ -210,7 +387,6 @@ class CarTableModel(QAbstractTableModel):
             )
         )
 
-
         if role == Qt.DisplayRole:
 
             match index.column():
@@ -219,21 +395,17 @@ class CarTableModel(QAbstractTableModel):
 
                     return car.reporting_mark
 
-
                 case 1:
 
                     return car.number
-
 
                 case 2:
 
                     return car.owner
 
-
                 case 3:
 
                     return car.car_type
-
 
                 case 4:
 
@@ -243,23 +415,19 @@ class CarTableModel(QAbstractTableModel):
                         ""
                     )
 
-
                 case 5:
 
                     return (
                         f"{emoji} {display}"
                     ).strip()
 
-
                 case 6:
 
                     return car.location
 
-
-
         #
         # Keep status text readable
-        # with selection highlight
+        # with selection highlight.
         #
 
         if (
@@ -271,19 +439,23 @@ class CarTableModel(QAbstractTableModel):
                 "black"
             )
 
-
         return None
 
-
+    # ---------------------------------------------------------
+    # Get car
+    # ---------------------------------------------------------
 
     def get_car(
         self,
         row
     ):
 
-        if 0 <= row < len(self.cars):
+        if 0 <= row < len(
+            self.cars
+        ):
 
-            return self.cars[row]
-
+            return self.cars[
+                row
+            ]
 
         return None
