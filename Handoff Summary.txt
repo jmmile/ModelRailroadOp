@@ -1,0 +1,139 @@
+I'm continuing development of my Python/PySide6 project **Model Railroad Operations** from another chat.
+
+Please use this as the current project state:
+
+* Python 3.13.14
+* PySide6
+* SQLAlchemy 2.0.51
+* SQLite database: `data/railroad.db`
+* Development environment: Windows 11 / VS Code
+* Project uses a `src` layout.
+* I prefer **complete corrected files**, not partial code snippets, whenever we modify code.
+
+### Current application structure
+
+The application manages:
+
+* Car Roster
+* Industries
+* Industry Tracks
+* Car Locations
+* Spot Occupancy
+* Spots / Spot Manager
+* Car History
+
+### Current location system
+
+Cars now use:
+
+`Industry → Track → Spot`
+
+The `Car` model contains:
+
+* `industry_id`
+* `track_id`
+* `spot_id`
+* legacy `location` text field
+
+`CarLocationService` is the central service for:
+
+* validating cars against spot restrictions
+* assigning cars
+* moving cars
+* removing cars from locations
+* finding eligible unassigned cars
+* recording car movement history
+
+### Important decision
+
+Car types are intentionally specific. **Do NOT broadly normalize car types.**
+
+Examples include:
+
+* `Hopper - Grain`
+* `Hopper - Coal`
+* other specific identifiers
+
+The spot assignment system uses exact car-type matching for restrictions.
+
+### Roster
+
+`RosterTab` displays the car roster and has:
+
+* Add Car
+* Edit Car
+* Delete Car
+* Import CSV
+* Export CSV
+* Search
+* sortable columns
+
+The Car Type list in `AddCarDialog` is intentionally sorted alphabetically.
+
+### Current issue / task
+
+We ran `check_car_locations.py`.
+
+There are 20 cars in the database.
+
+It found exactly 3 location problems:
+
+1. `CSXT 789012`
+
+   * Old Location: `Lexington`
+   * Industry: none
+   * Track: none
+   * Spot: none
+   * Expected: `Unassigned`
+
+2. `SP 45222`
+
+   * Old Location: `Seattle`
+   * Industry: none
+   * Track: none
+   * Spot: none
+   * Expected: `Unassigned`
+
+3. `USLX 14022`
+
+   * Old Location: `Cassette 1`
+   * Industry: none
+   * Track: none
+   * Spot: none
+   * Expected: `Unassigned`
+
+The check script is read-only and made no database changes.
+
+### What we were about to do
+
+Create a cleanup script that changes ONLY the legacy `location` field for those three cars to:
+
+`Unassigned`
+
+Do not change:
+
+* car type
+* status
+* reporting mark
+* number
+* industry
+* track
+* spot
+* any other cars
+
+After that, verify the database with `check_car_locations.py` again.
+
+### Development roadmap
+
+The larger project is moving toward:
+
+1. Complete Industry Tracks
+2. Assign Cars to Industry → Track → Spot
+3. Spot management and restrictions
+4. Car locations
+5. Car movement/history
+6. Further UI improvements
+
+Please continue from this exact state rather than starting the project over.
+
+When we make code changes, send me the **entire corrected file**.

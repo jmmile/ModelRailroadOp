@@ -20,6 +20,9 @@ from modelrailroadops.services.car_service import CarService
 
 
 class AddCarDialog(QDialog):
+    """
+    Dialog used to add or edit a freight car.
+    """
 
     def __init__(
         self,
@@ -50,30 +53,39 @@ class AddCarDialog(QDialog):
 
         self.owner = QLineEdit()
 
-
         self.car_type = QComboBox()
 
-        self.car_type.addItems([
+        #
+        # Keep the exact car-type identifiers.
+        #
+        # Only the presentation order is sorted.
+        # No names are normalized or changed.
+        #
+
+        car_types = [
             "Boxcar",
+            "Boxcar - High Cube",
             "Cattle Car",
-            "Bulkhead Flatcar",
-            "Covered Hopper",
-            "Flat Car",
-            "Tank Car",
-            "Gondola",
-            "Hopper",
-            "Center Beam Flatcar",
+            "Flatcar",
+            "Flatcar - Bulkhead",
+            "Flatcar - Centerbeam",
+            "Flatcar - Trailer",
+            "Flatcar - Center Depressed",
+            "Tank Car (hazardous)",
+            "Tank Car (general service)",
+            "Tank Car (specialty)",    
             "Autorack",
             "Gondola",
+            "Hopper Car (cylindrical)",
             "Hopper Car (covered)",
             "Hopper Car (open)",
             "Hopper Car (grain)",
+            "Hopper Car (wood chips)",
+            "Hopper Car (ore)",
             "Hopper Car (specialty)",
             "Refrigerator Car",
             "Spine Car",
-            "Trailer Flatcar",
-            "Multi-Level Auto Carrier",
-            "Double Stack Well Car",
+            "Well Car",
             "Caboose",
             "Maintenance of Way (MoW) Car",
             "Maintenance of Way (MoW) Flatcar",
@@ -87,19 +99,22 @@ class AddCarDialog(QDialog):
             "Passenger-Observation",
             "Passenger-Sleeper",
             "Passenger-Baggage",
-            "Wood Chip Hopper",
-            "HiCube",
-            "Depressed Flatcar",
-            "Other",
-        ])
+            "Passenger-Dining",
+        ]
 
+        car_types.sort(
+            key=str.casefold
+        )
+
+        self.car_type.addItems(
+            car_types
+        )
 
         self.length = QLineEdit()
 
         self.length.setPlaceholderText(
             "Length in feet"
         )
-
 
         self.status = QComboBox()
 
@@ -111,7 +126,6 @@ class AddCarDialog(QDialog):
             "Interchange Track",
         ])
 
-
         #
         # Operating location
         #
@@ -121,7 +135,6 @@ class AddCarDialog(QDialog):
         self.track = QComboBox()
 
         self.spot = QComboBox()
-
 
         self.industry.addItem(
             "Unassigned",
@@ -137,7 +150,6 @@ class AddCarDialog(QDialog):
             "Unassigned",
             None
         )
-
 
         #
         # Form fields
@@ -188,11 +200,9 @@ class AddCarDialog(QDialog):
             self.spot
         )
 
-
         layout.addLayout(
             form
         )
-
 
         #
         # Buttons
@@ -222,13 +232,11 @@ class AddCarDialog(QDialog):
             buttons
         )
 
-
         #
         # Load industries
         #
 
         self.load_industries()
-
 
         #
         # Signals
@@ -249,7 +257,6 @@ class AddCarDialog(QDialog):
         self.save_button.clicked.connect(
             self.save
         )
-
 
         #
         # Populate edit fields
@@ -273,23 +280,19 @@ class AddCarDialog(QDialog):
                 self.car.car_type
             )
 
-
             if self.car.length is not None:
 
                 self.length.setText(
                     str(self.car.length)
                 )
 
-
             self.status.setCurrentText(
                 self.car.status
             )
 
-
             self.setWindowTitle(
                 "Edit Freight Car"
             )
-
 
             #
             # Restore existing location
@@ -300,8 +303,6 @@ class AddCarDialog(QDialog):
                 self.select_industry(
                     self.car.industry_id
                 )
-
-
 
     #
     # Industry loading
@@ -317,7 +318,6 @@ class AddCarDialog(QDialog):
                 self.industry.currentData()
             )
 
-
         self.industry.blockSignals(True)
 
         self.industry.clear()
@@ -326,7 +326,6 @@ class AddCarDialog(QDialog):
             "Unassigned",
             None
         )
-
 
         with SessionLocal() as session:
 
@@ -341,14 +340,12 @@ class AddCarDialog(QDialog):
                 .all()
             )
 
-
             for industry in industries:
 
                 self.industry.addItem(
                     industry.name,
                     industry.id
                 )
-
 
         if current_industry_id is not None:
 
@@ -362,12 +359,9 @@ class AddCarDialog(QDialog):
                     index
                 )
 
-
         self.industry.blockSignals(False)
 
-
         self.load_tracks()
-
 
     #
     # Industry changed
@@ -379,7 +373,6 @@ class AddCarDialog(QDialog):
     ):
 
         self.load_tracks()
-
 
     #
     # Load tracks
@@ -394,7 +387,6 @@ class AddCarDialog(QDialog):
             self.industry.currentData()
         )
 
-
         self.track.blockSignals(True)
 
         self.track.clear()
@@ -403,7 +395,6 @@ class AddCarDialog(QDialog):
             "Unassigned",
             None
         )
-
 
         if industry_id is not None:
 
@@ -424,14 +415,12 @@ class AddCarDialog(QDialog):
                     .all()
                 )
 
-
                 for track in tracks:
 
                     self.track.addItem(
                         track.name,
                         track.id
                     )
-
 
         if selected_track_id is not None:
 
@@ -445,12 +434,9 @@ class AddCarDialog(QDialog):
                     index
                 )
 
-
         self.track.blockSignals(False)
 
-
         self.load_spots()
-
 
     #
     # Track changed
@@ -462,7 +448,6 @@ class AddCarDialog(QDialog):
     ):
 
         self.load_spots()
-
 
     #
     # Load spots
@@ -477,7 +462,6 @@ class AddCarDialog(QDialog):
             self.track.currentData()
         )
 
-
         self.spot.blockSignals(True)
 
         self.spot.clear()
@@ -486,7 +470,6 @@ class AddCarDialog(QDialog):
             "Unassigned",
             None
         )
-
 
         if track_id is not None:
 
@@ -507,13 +490,11 @@ class AddCarDialog(QDialog):
                     .all()
                 )
 
-
                 for spot in spots:
 
                     occupied = (
                         spot.car is not None
                     )
-
 
                     if occupied:
 
@@ -528,19 +509,16 @@ class AddCarDialog(QDialog):
                             f"Spot {spot.spot_number}"
                         )
 
-
                     if spot.name:
 
                         label += (
                             f" - {spot.name}"
                         )
 
-
                     self.spot.addItem(
                         label,
                         spot.id
                     )
-
 
         if selected_spot_id is not None:
 
@@ -554,10 +532,7 @@ class AddCarDialog(QDialog):
                     index
                 )
 
-
         self.spot.blockSignals(False)
-
-
 
     #
     # Select an existing industry
@@ -572,11 +547,9 @@ class AddCarDialog(QDialog):
             industry_id
         )
 
-
         if index < 0:
 
             return
-
 
         self.industry.blockSignals(True)
 
@@ -586,7 +559,6 @@ class AddCarDialog(QDialog):
 
         self.industry.blockSignals(False)
 
-
         self.load_tracks(
             selected_track_id=(
                 self.car.track_id
@@ -595,7 +567,6 @@ class AddCarDialog(QDialog):
             )
         )
 
-
         self.load_spots(
             selected_spot_id=(
                 self.car.spot_id
@@ -603,8 +574,6 @@ class AddCarDialog(QDialog):
                 else None
             )
         )
-
-
 
     #
     # Save
@@ -618,18 +587,15 @@ class AddCarDialog(QDialog):
             .upper()
         )
 
-
         number = (
             self.number.text()
             .strip()
         )
 
-
         owner = (
             self.owner.text()
             .strip()
         )
-
 
         if not reporting_mark:
 
@@ -641,7 +607,6 @@ class AddCarDialog(QDialog):
 
             return
 
-
         if not number:
 
             QMessageBox.warning(
@@ -652,15 +617,12 @@ class AddCarDialog(QDialog):
 
             return
 
-
         length_text = (
             self.length.text()
             .strip()
         )
 
-
         length = None
-
 
         if length_text:
 
@@ -680,26 +642,21 @@ class AddCarDialog(QDialog):
 
                 return
 
-
         status = (
             self.status.currentText()
         )
-
 
         industry_id = (
             self.industry.currentData()
         )
 
-
         track_id = (
             self.track.currentData()
         )
 
-
         spot_id = (
             self.spot.currentData()
         )
-
 
         #
         # A spot can only be selected when
@@ -718,7 +675,6 @@ class AddCarDialog(QDialog):
 
                 return
 
-
             if industry_id is None:
 
                 QMessageBox.warning(
@@ -728,7 +684,6 @@ class AddCarDialog(QDialog):
                 )
 
                 return
-
 
         #
         # Edit existing car
@@ -756,7 +711,6 @@ class AddCarDialog(QDialog):
                 location=self.car.location,
             )
 
-
             if updated_car is None:
 
                 QMessageBox.warning(
@@ -766,7 +720,6 @@ class AddCarDialog(QDialog):
                 )
 
                 return
-
 
             try:
 
@@ -783,7 +736,6 @@ class AddCarDialog(QDialog):
                         self.car.id
                     )
 
-
             except ValueError as ex:
 
                 QMessageBox.warning(
@@ -793,7 +745,6 @@ class AddCarDialog(QDialog):
                 )
 
                 return
-
 
         #
         # Add new car
@@ -819,7 +770,6 @@ class AddCarDialog(QDialog):
                 location="Unassigned",
             )
 
-
             if car is None:
 
                 QMessageBox.warning(
@@ -833,7 +783,6 @@ class AddCarDialog(QDialog):
                 )
 
                 return
-
 
             #
             # Assign the new car to the
@@ -861,7 +810,6 @@ class AddCarDialog(QDialog):
                         car.id
                     )
 
-
                     QMessageBox.warning(
                         self,
                         "Location Error",
@@ -870,6 +818,4 @@ class AddCarDialog(QDialog):
 
                     return
 
-
         self.accept()
-

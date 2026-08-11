@@ -1,4 +1,3 @@
-#```python
 from PySide6.QtCore import Qt
 
 from PySide6.QtWidgets import (
@@ -47,6 +46,17 @@ from modelrailroadops.ui.styles import (
 class IndustryTracksWidget(QWidget):
     """
     Displays and manages industry tracks and their spots.
+
+    Industries with zero tracks are also displayed. Selecting
+    an industry with no tracks allows the user to add its first
+    track directly from this tab.
+
+    Track deletion rules:
+
+        - "No Tracks" rows cannot be deleted.
+        - Tracks with zero spots can be deleted.
+        - Tracks with spots can be deleted if all spots are empty.
+        - Tracks containing cars cannot be deleted.
     """
 
     SPOT_ID_ROLE = Qt.UserRole
@@ -90,6 +100,10 @@ class IndustryTracksWidget(QWidget):
 
         self.table.setEditTriggers(
             QAbstractItemView.NoEditTriggers
+        )
+
+        self.table.setSortingEnabled(
+            False
         )
 
         self.table.horizontalHeader().setSectionResizeMode(
@@ -179,6 +193,10 @@ class IndustryTracksWidget(QWidget):
             "Edit Track"
         )
 
+        self.delete_track_button = QPushButton(
+            "Delete Track"
+        )
+
         #
         # Spot buttons
         #
@@ -196,7 +214,7 @@ class IndustryTracksWidget(QWidget):
         )
 
         #
-        # Refresh
+        # Refresh button
         #
 
         self.refresh_button = QPushButton(
@@ -215,6 +233,10 @@ class IndustryTracksWidget(QWidget):
 
         track_button_layout.addWidget(
             self.edit_button
+        )
+
+        track_button_layout.addWidget(
+            self.delete_track_button
         )
 
         track_button_layout.addStretch()
@@ -275,10 +297,6 @@ class IndustryTracksWidget(QWidget):
             spot_button_layout
         )
 
-        self.setLayout(
-            layout
-        )
-
         #
         # Signals
         #
@@ -289,6 +307,10 @@ class IndustryTracksWidget(QWidget):
 
         self.edit_button.clicked.connect(
             self.edit_track
+        )
+
+        self.delete_track_button.clicked.connect(
+            self.delete_track
         )
 
         self.add_spot_button.clicked.connect(
@@ -319,7 +341,24 @@ class IndustryTracksWidget(QWidget):
         # Initial state
         #
 
+        self.update_button_state()
+
         self.refresh()
+
+    #
+    # Refresh whenever the tab becomes visible
+    #
+
+    def showEvent(
+        self,
+        event
+    ):
+
+        self.refresh()
+
+        super().showEvent(
+            event
+        )
 
     #
     # Refresh everything
@@ -329,17 +368,25 @@ class IndustryTracksWidget(QWidget):
 
         self.model.refresh()
 
+        self.table.viewport().update()
+
         self.table.resizeColumnsToContents()
+
+        self.table.clearSelection()
+
+        self.spot_table.clearSelection()
 
         self.load_spots()
 
         self.update_button_state()
 
     #
-    # Get selected track
+    # Get selected row
     #
 
-    def get_selected_track(self):
+    def get_selected_row(
+        self
+    ):
 
         index = self.table.currentIndex()
 
@@ -347,15 +394,57 @@ class IndustryTracksWidget(QWidget):
 
             return None
 
-        if index.row() >= len(
+        row_number = index.row()
+
+        if row_number < 0:
+
+            return None
+
+        if row_number >= len(
             self.model.tracks
         ):
 
             return None
 
         return self.model.tracks[
-            index.row()
+            row_number
         ]
+
+    #
+    # Get selected industry
+    #
+
+    def get_selected_industry(
+        self
+    ):
+
+        row = self.get_selected_row()
+
+        if row is None:
+
+            return None
+
+        return row.get(
+            "industry"
+        )
+
+    #
+    # Get selected track
+    #
+
+    def get_selected_track(
+        self
+    ):
+
+        row = self.get_selected_row()
+
+        if row is None:
+
+            return None
+
+        return row.get(
+            "track"
+        )
 
     #
     # Track selection changed
@@ -374,8 +463,7 @@ class IndustryTracksWidget(QWidget):
         self.update_button_state()
 
     #
-    # Check occupancy directly from
-    # the Car table.
+    # Check whether a spot is occupied
     #
 
     def is_spot_occupied(
@@ -396,7 +484,7 @@ class IndustryTracksWidget(QWidget):
             return car is not None
 
     #
-    # Get car occupying a spot.
+    # Get car occupying a spot
     #
 
     def get_car_for_spot(
@@ -415,29 +503,82 @@ class IndustryTracksWidget(QWidget):
             )
 
     #
+    # Determine whether a track contains cars
+    #
+
+    def track_has_cars(
+        self,
+        track
+    ):
+
+        if track is None:
+
+            return False
+
+        with SessionLocal() as session:
+
+            car = (
+                session.query(Car)
+                .filter(
+                    Car.track_id == track.id
+                )
+                .first()
+            )
+
+            return car is not None
+
+    #
     # Load spots
     #
 
-    def load_spots(self):
+    def load_spots(
+        self
+    ):
 
         self.spot_table.setRowCount(
             0
         )
 
+        industry = self.get_selected_industry()
+
         track = self.get_selected_track()
 
-        if track is None:
+        #
+        # No industry selected
+        #
+
+        if industry is None:
 
             self.spot_label.setText(
-                "Spots - Select a track"
+                "Spots - Select an industry"
             )
 
             self.update_button_state()
 
             return
 
+        #
+        # Industry selected but no track
+        #
+
+        if track is None:
+
+            self.spot_label.setText(
+                f"Spots - {industry.name} "
+                f"(No track selected)"
+            )
+
+            self.update_button_state()
+
+            return
+
+        #
+        # Track selected
+        #
+
         self.spot_label.setText(
-            f"Spots - {track.name}"
+            f"Spots - {industry.name} / "
+            f"{track.name}"
         )
 
         spots = SpotService.get_by_track(
@@ -451,11 +592,6 @@ class IndustryTracksWidget(QWidget):
             self.spot_table.insertRow(
                 row
             )
-
-            #
-            # Determine occupancy from
-            # the database while loading.
-            #
 
             occupied = self.is_spot_occupied(
                 spot.id
@@ -535,8 +671,7 @@ class IndustryTracksWidget(QWidget):
                 row,
                 4,
                 QTableWidgetItem(
-                    spot.allowed_car_type
-                    or "Any"
+                    spot.allowed_car_type or "Any"
                 )
             )
 
@@ -548,8 +683,7 @@ class IndustryTracksWidget(QWidget):
                 row,
                 5,
                 QTableWidgetItem(
-                    spot.allowed_owner
-                    or "Any"
+                    spot.allowed_owner or "Any"
                 )
             )
 
@@ -578,7 +712,7 @@ class IndustryTracksWidget(QWidget):
             )
 
             #
-            # Occupancy
+            # Occupancy status
             #
 
             if occupied:
@@ -590,8 +724,8 @@ class IndustryTracksWidget(QWidget):
                 if car is not None:
 
                     car_text = (
-                        f"{car.reporting_mark}"
-                        f" {car.number}"
+                        f"{car.reporting_mark} "
+                        f"{car.number}"
                     )
 
                     status = (
@@ -622,7 +756,9 @@ class IndustryTracksWidget(QWidget):
     # Get selected spot ID
     #
 
-    def get_selected_spot_id(self):
+    def get_selected_spot_id(
+        self
+    ):
 
         row = self.spot_table.currentRow()
 
@@ -655,7 +791,9 @@ class IndustryTracksWidget(QWidget):
     # Get selected spot
     #
 
-    def get_selected_spot(self):
+    def get_selected_spot(
+        self
+    ):
 
         spot_id = self.get_selected_spot_id()
 
@@ -685,7 +823,9 @@ class IndustryTracksWidget(QWidget):
     # Spot selection changed
     #
 
-    def spot_selection_changed(self):
+    def spot_selection_changed(
+        self
+    ):
 
         self.update_button_state()
 
@@ -693,7 +833,27 @@ class IndustryTracksWidget(QWidget):
     # Update button state
     #
 
-    def update_button_state(self):
+    def update_button_state(
+        self
+    ):
+
+        industry = self.get_selected_industry()
+
+        industry_selected = (
+            industry is not None
+        )
+
+        #
+        # Add Track
+        #
+
+        self.add_button.setEnabled(
+            industry_selected
+        )
+
+        #
+        # Selected track
+        #
 
         track = self.get_selected_track()
 
@@ -701,9 +861,38 @@ class IndustryTracksWidget(QWidget):
             track is not None
         )
 
+        #
+        # Edit Track
+        #
+
         self.edit_button.setEnabled(
             track_selected
         )
+
+        #
+        # Delete Track
+        #
+        # A track is deletable when it has
+        # no cars assigned to it.
+        #
+
+        if track_selected:
+
+            self.delete_track_button.setEnabled(
+                not self.track_has_cars(
+                    track
+                )
+            )
+
+        else:
+
+            self.delete_track_button.setEnabled(
+                False
+            )
+
+        #
+        # Spot operations
+        #
 
         self.add_spot_button.setEnabled(
             track_selected
@@ -713,17 +902,12 @@ class IndustryTracksWidget(QWidget):
 
         spot_selected = (
             spot_id is not None
+            and track_selected
         )
 
         self.edit_spot_button.setEnabled(
             spot_selected
         )
-
-        #
-        # Delete is enabled ONLY when
-        # a spot is selected AND the
-        # database says the spot is empty.
-        #
 
         if not spot_selected:
 
@@ -745,11 +929,13 @@ class IndustryTracksWidget(QWidget):
     # Add track
     #
 
-    def add_track(self):
+    def add_track(
+        self
+    ):
 
-        selected = self.table.currentIndex()
+        industry = self.get_selected_industry()
 
-        if not selected.isValid():
+        if industry is None:
 
             QMessageBox.warning(
                 self,
@@ -759,56 +945,60 @@ class IndustryTracksWidget(QWidget):
 
             return
 
-        industry = (
-            self.model.tracks[
-                selected.row()
-            ].industry
-        )
-
         dialog = AddIndustryTrackDialog(
             parent=self
         )
 
-        if dialog.exec():
+        if not dialog.exec():
 
-            name = (
-                dialog.name.text()
-                .strip()
+            return
+
+        name = (
+            dialog.name.text()
+            .strip()
+        )
+
+        if not name:
+
+            QMessageBox.warning(
+                self,
+                "Missing Track Name",
+                "Please enter a track name."
             )
 
-            if not name:
+            return
 
-                QMessageBox.warning(
-                    self,
-                    "Missing Track Name",
-                    "Please enter a track name."
-                )
+        result = IndustryTrackService.add(
+            industry_id=industry.id,
+            name=name,
+            spots=dialog.spots.value(),
+        )
 
-                return
+        if result:
 
-            result = IndustryTrackService.add(
-                industry_id=industry.id,
-                name=name,
-                spots=dialog.spots.value(),
+            QMessageBox.information(
+                self,
+                "Track Added",
+                f"Track '{name}' added successfully."
             )
 
-            if result:
+            self.refresh()
 
-                self.refresh()
+        else:
 
-            else:
-
-                QMessageBox.warning(
-                    self,
-                    "Add Track Failed",
-                    "The industry track could not be added."
-                )
+            QMessageBox.warning(
+                self,
+                "Add Track Failed",
+                "The industry track could not be added."
+            )
 
     #
     # Edit track
     #
 
-    def edit_track(self):
+    def edit_track(
+        self
+    ):
 
         track = self.get_selected_track()
 
@@ -822,36 +1012,174 @@ class IndustryTracksWidget(QWidget):
 
             return
 
+        old_name = track.name
+
         dialog = AddIndustryTrackDialog(
             track=track,
             parent=self
         )
 
-        if dialog.exec():
+        if not dialog.exec():
 
-            result = IndustryTrackService.update(
-                track.id,
-                dialog.name.text().strip(),
-                dialog.spots.value(),
+            return
+
+        name = (
+            dialog.name.text()
+            .strip()
+        )
+
+        if not name:
+
+            QMessageBox.warning(
+                self,
+                "Missing Track Name",
+                "Please enter a track name."
             )
 
-            if result:
+            return
 
-                self.refresh()
+        result = IndustryTrackService.update(
+            track.id,
+            name,
+            dialog.spots.value(),
+        )
 
-            else:
+        if result:
 
-                QMessageBox.warning(
-                    self,
-                    "Update Failed",
-                    "Cannot reduce spots because some spots contain cars."
+            QMessageBox.information(
+                self,
+                "Track Updated",
+                f"Track '{name}' updated successfully."
+            )
+
+            self.refresh()
+
+        else:
+
+            QMessageBox.warning(
+                self,
+                "Update Failed",
+                (
+                    "Cannot reduce spots because some "
+                    "spots contain cars."
                 )
+            )
+
+    #
+    # Delete track
+    #
+
+    def delete_track(
+        self
+    ):
+
+        track = self.get_selected_track()
+
+        if track is None:
+
+            QMessageBox.warning(
+                self,
+                "No Track Selected",
+                "Select a track to delete."
+            )
+
+            return
+
+        #
+        # Final database check
+        #
+
+        if self.track_has_cars(
+            track
+        ):
+
+            QMessageBox.warning(
+                self,
+                "Track Occupied",
+                (
+                    "This track contains one or more cars "
+                    "and cannot be deleted."
+                )
+            )
+
+            self.update_button_state()
+
+            return
+
+        answer = QMessageBox.question(
+            self,
+            "Delete Track",
+            (
+                f"Are you sure you want to delete "
+                f"track '{track.name}'?"
+            ),
+            QMessageBox.Yes
+            | QMessageBox.No,
+            QMessageBox.No,
+        )
+
+        if answer != QMessageBox.Yes:
+
+            return
+
+        #
+        # Final occupancy check
+        #
+
+        if self.track_has_cars(
+            track
+        ):
+
+            QMessageBox.warning(
+                self,
+                "Track Occupied",
+                (
+                    "This track now contains one or more "
+                    "cars and cannot be deleted."
+                )
+            )
+
+            self.update_button_state()
+
+            return
+
+        track_name = track.name
+
+        result = IndustryTrackService.delete(
+            track.id
+        )
+
+        if result:
+
+            QMessageBox.information(
+                self,
+                "Track Deleted",
+                f"Track '{track_name}' deleted successfully."
+            )
+
+            self.refresh()
+
+        else:
+
+            QMessageBox.warning(
+                self,
+                "Delete Track Failed",
+                (
+                    "The track could not be deleted. "
+                    "Make sure the track does not contain "
+                    "any assigned cars."
+                )
+            )
+
+            self.refresh()
 
     #
     # Add spot
     #
 
-    def add_spot(self):
+    def add_spot(
+        self
+    ):
 
         track = self.get_selected_track()
 
@@ -870,51 +1198,64 @@ class IndustryTracksWidget(QWidget):
             parent=self,
         )
 
-        if dialog.exec():
+        if not dialog.exec():
 
-            data = dialog.get_data()
+            return
 
-            try:
+        data = dialog.get_data()
 
-                SpotService.add(
-                    track_id=track.id,
-                    spot_number=data["spot_number"],
-                    name=data["name"],
-                    description=data["description"],
-                    max_length=data["max_length"],
-                    allowed_car_type=data[
-                        "allowed_car_type"
-                    ],
-                    allowed_owner=data[
-                        "allowed_owner"
-                    ],
-                    hazardous_allowed=data[
-                        "hazardous_allowed"
-                    ],
-                    load_only=data[
-                        "load_only"
-                    ],
-                    empty_only=data[
-                        "empty_only"
-                    ],
-                    notes=data["notes"],
+        try:
+
+            SpotService.add(
+                track_id=track.id,
+                spot_number=data["spot_number"],
+                name=data["name"],
+                description=data["description"],
+                max_length=data["max_length"],
+                allowed_car_type=data[
+                    "allowed_car_type"
+                ],
+                allowed_owner=data[
+                    "allowed_owner"
+                ],
+                hazardous_allowed=data[
+                    "hazardous_allowed"
+                ],
+                load_only=data[
+                    "load_only"
+                ],
+                empty_only=data[
+                    "empty_only"
+                ],
+                notes=data["notes"],
+            )
+
+            QMessageBox.information(
+                self,
+                "Spot Added",
+                (
+                    f"Spot {data['spot_number']} "
+                    "added successfully."
                 )
+            )
 
-                self.load_spots()
+            self.load_spots()
 
-            except Exception as ex:
+        except Exception as ex:
 
-                QMessageBox.warning(
-                    self,
-                    "Add Spot Failed",
-                    str(ex)
-                )
+            QMessageBox.warning(
+                self,
+                "Add Spot Failed",
+                str(ex)
+            )
 
     #
     # Edit spot
     #
 
-    def edit_spot(self):
+    def edit_spot(
+        self
+    ):
 
         track = self.get_selected_track()
 
@@ -940,50 +1281,63 @@ class IndustryTracksWidget(QWidget):
             parent=self,
         )
 
-        if dialog.exec():
+        if not dialog.exec():
 
-            data = dialog.get_data()
+            return
 
-            result = SpotService.update(
-                spot_id=spot.id,
-                name=data["name"],
-                description=data["description"],
-                max_length=data["max_length"],
-                allowed_car_type=data[
-                    "allowed_car_type"
-                ],
-                allowed_owner=data[
-                    "allowed_owner"
-                ],
-                hazardous_allowed=data[
-                    "hazardous_allowed"
-                ],
-                load_only=data[
-                    "load_only"
-                ],
-                empty_only=data[
-                    "empty_only"
-                ],
-                notes=data["notes"],
+        data = dialog.get_data()
+
+        result = SpotService.update(
+            spot_id=spot.id,
+            name=data["name"],
+            description=data["description"],
+            max_length=data["max_length"],
+            allowed_car_type=data[
+                "allowed_car_type"
+            ],
+            allowed_owner=data[
+                "allowed_owner"
+            ],
+            hazardous_allowed=data[
+                "hazardous_allowed"
+            ],
+            load_only=data[
+                "load_only"
+            ],
+            empty_only=data[
+                "empty_only"
+            ],
+            notes=data["notes"],
+        )
+
+        if result:
+
+            QMessageBox.information(
+                self,
+                "Spot Updated",
+                (
+                    f"Spot {spot.spot_number} "
+                    "updated successfully."
+                )
             )
 
-            if result:
+            self.load_spots()
 
-                self.load_spots()
+        else:
 
-            else:
-
-                QMessageBox.warning(
-                    self,
-                    "Update Failed",
-                    "The spot could not be updated."
-                )
+            QMessageBox.warning(
+                self,
+                "Update Failed",
+                "The spot could not be updated."
+            )
 
     #
     # Delete spot
     #
 
-    def delete_spot(self):
+    def delete_spot(
+        self
+    ):
 
         spot_id = self.get_selected_spot_id()
 
@@ -998,8 +1352,7 @@ class IndustryTracksWidget(QWidget):
             return
 
         #
-        # ALWAYS check the database immediately
-        # before allowing deletion.
+        # Check database immediately
         #
 
         if self.is_spot_occupied(
@@ -1039,6 +1392,7 @@ class IndustryTracksWidget(QWidget):
             ),
             QMessageBox.Yes
             | QMessageBox.No,
+            QMessageBox.No,
         )
 
         if answer != QMessageBox.Yes:
@@ -1046,7 +1400,7 @@ class IndustryTracksWidget(QWidget):
             return
 
         #
-        # Check one final time before deletion.
+        # Final occupancy check
         #
 
         if self.is_spot_occupied(
@@ -1056,18 +1410,32 @@ class IndustryTracksWidget(QWidget):
             QMessageBox.warning(
                 self,
                 "Spot Occupied",
-                "This spot now contains a car and cannot be deleted."
+                (
+                    "This spot now contains a car "
+                    "and cannot be deleted."
+                )
             )
 
             self.load_spots()
 
             return
 
+        spot_number = spot.spot_number
+
         result = SpotService.delete(
             spot_id
         )
 
         if result:
+
+            QMessageBox.information(
+                self,
+                "Spot Deleted",
+                (
+                    f"Spot {spot_number} "
+                    "deleted successfully."
+                )
+            )
 
             self.load_spots()
 
@@ -1080,4 +1448,3 @@ class IndustryTracksWidget(QWidget):
             )
 
             self.load_spots()
-#```

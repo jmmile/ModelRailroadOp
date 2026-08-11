@@ -1,13 +1,13 @@
-#```python
+
 from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
     QFormLayout,
+    QLabel,
     QComboBox,
     QPushButton,
     QHBoxLayout,
     QMessageBox,
-    QLabel,
     QGroupBox,
 )
 
@@ -25,28 +25,24 @@ from modelrailroadops.services.car_location_service import (
 
 class AssignCarDialog(QDialog):
     """
-    Dialog used to assign or move a car to a spot.
+    Dialog used to assign an unassigned car to a spot.
 
-    ASSIGN mode:
-        Only unassigned cars are displayed.
+    The destination is selected by:
 
-    MOVE mode:
-        The specified car is displayed and can be moved
-        to another destination.
+        Industry
+            -> Track
+                -> Spot
 
-    Car dropdown displays:
+    Only unassigned cars that satisfy the selected
+    spot's restrictions are displayed.
 
-        Reporting Mark Number — Car Type
-
-    Example:
-
-        UP 12345 — Boxcar
+    All final validation is performed by
+    CarLocationService.
     """
 
     def __init__(
         self,
         spot_id=None,
-        car_id=None,
         industry_id=None,
         parent=None,
     ):
@@ -54,70 +50,53 @@ class AssignCarDialog(QDialog):
         super().__init__(parent)
 
         self.fixed_spot_id = spot_id
-        self.fixed_car_id = car_id
         self.fixed_industry_id = industry_id
 
         self.selected_spot_id = None
 
-        #
-        # Determine operating mode
-        #
-
-        if self.fixed_car_id:
-
-            self.mode = "MOVE"
-
-        else:
-
-            self.mode = "ASSIGN"
-
-        #
-        # Window
-        #
-
         self.setWindowTitle(
-            "Move Car"
-            if self.mode == "MOVE"
-            else "Assign Car"
+            "Assign Car"
         )
 
         self.resize(
-            550,
-            420
+            500,
+            400
         )
 
         #
         # Main layout
         #
 
-        layout = QVBoxLayout(self)
+        layout = QVBoxLayout(
+            self
+        )
 
         #
-        # Form
+        # Destination form
         #
 
         form = QFormLayout()
+
+        self.car_combo = QComboBox()
+
+        self.industry_combo = QComboBox()
+
+        self.track_combo = QComboBox()
+
+        self.spot_combo = QComboBox()
 
         #
         # Car
         #
 
-        self.car_combo = QComboBox()
-
-        if self.mode == "ASSIGN":
-
-            form.addRow(
-                "Car",
-                self.car_combo
-            )
+        form.addRow(
+            "Car",
+            self.car_combo
+        )
 
         #
         # Destination
         #
-
-        self.industry_combo = QComboBox()
-        self.track_combo = QComboBox()
-        self.spot_combo = QComboBox()
 
         if self.fixed_spot_id is None:
 
@@ -138,14 +117,18 @@ class AssignCarDialog(QDialog):
 
         else:
 
-            self.destination_label = QLabel()
+            self.destination_label = QLabel(
+                "Loading..."
+            )
 
             form.addRow(
                 "Destination",
                 self.destination_label
             )
 
-        layout.addLayout(form)
+        layout.addLayout(
+            form
+        )
 
         #
         # Car information
@@ -157,10 +140,29 @@ class AssignCarDialog(QDialog):
 
         info_form = QFormLayout()
 
-        self.reporting_mark_label = QLabel("-")
-        self.car_type_label = QLabel("-")
-        self.length_label = QLabel("-")
-        self.location_label = QLabel("-")
+        self.reporting_mark_label = QLabel(
+            "-"
+        )
+
+        self.car_type_label = QLabel(
+            "-"
+        )
+
+        self.length_label = QLabel(
+            "-"
+        )
+
+        self.owner_label = QLabel(
+            "-"
+        )
+
+        self.status_label = QLabel(
+            "-"
+        )
+
+        self.location_label = QLabel(
+            "-"
+        )
 
         info_form.addRow(
             "Car",
@@ -175,6 +177,16 @@ class AssignCarDialog(QDialog):
         info_form.addRow(
             "Length",
             self.length_label
+        )
+
+        info_form.addRow(
+            "Owner",
+            self.owner_label
+        )
+
+        info_form.addRow(
+            "Status",
+            self.status_label
         )
 
         info_form.addRow(
@@ -197,9 +209,7 @@ class AssignCarDialog(QDialog):
         buttons = QHBoxLayout()
 
         self.assign_button = QPushButton(
-            "Move"
-            if self.mode == "MOVE"
-            else "Assign"
+            "Assign"
         )
 
         self.cancel_button = QPushButton(
@@ -216,49 +226,31 @@ class AssignCarDialog(QDialog):
             self.cancel_button
         )
 
-        layout.addLayout(buttons)
+        layout.addLayout(
+            buttons
+        )
 
         #
         # Signals
         #
 
         self.assign_button.clicked.connect(
-            self.assign
+            self.assign_car
         )
 
         self.cancel_button.clicked.connect(
             self.reject
         )
 
-        #
-        # Load data
-        #
-
-        if self.mode == "ASSIGN":
-
-            self.load_cars()
-
-            self.car_combo.currentIndexChanged.connect(
-                self.update_car_information
-            )
-
-        else:
-
-            self.update_car_information()
+        self.car_combo.currentIndexChanged.connect(
+            self.update_car_information
+        )
 
         #
-        # Fixed destination
+        # Destination signals
         #
 
-        if self.fixed_spot_id:
-
-            self.load_destination_name()
-
-        else:
-
-            self.load_industries(
-                self.fixed_industry_id
-            )
+        if self.fixed_spot_id is None:
 
             self.industry_combo.currentIndexChanged.connect(
                 self.load_tracks
@@ -268,125 +260,270 @@ class AssignCarDialog(QDialog):
                 self.load_spots
             )
 
-            self.load_tracks()
-
-    #
-    # Load cars
-    #
-
-    def load_cars(self):
-        """
-        Load only cars that are not currently assigned
-        to a spot.
-
-        This prevents an already assigned car from being
-        selected for a second assignment.
-        """
-
-        self.car_combo.clear()
-
-        with SessionLocal() as session:
-
-            #
-            # A car is considered assigned if it has
-            # either a spot_id or a track_id.
-            #
-            # Cars without either location are available.
-            #
-
-            cars = (
-                session.query(Car)
-                .filter(
-                    Car.spot_id.is_(None),
-                    Car.track_id.is_(None),
-                )
-                .order_by(
-                    Car.reporting_mark,
-                    Car.number
-                )
-                .all()
+            self.spot_combo.currentIndexChanged.connect(
+                self.spot_changed
             )
 
-            for car in cars:
-
-                car_type = (
-                    car.car_type
-                    if car.car_type
-                    else "Unknown"
-                )
-
-                display_text = (
-                    f"{car.reporting_mark} "
-                    f"{car.number} — "
-                    f"{car_type}"
-                )
-
-                self.car_combo.addItem(
-                    display_text,
-                    car.id
-                )
-
         #
-        # Select first available car
+        # Disable assignment until a valid
+        # destination and eligible car exist.
         #
 
-        if self.car_combo.count():
+        self.assign_button.setEnabled(
+            False
+        )
 
-            self.car_combo.setCurrentIndex(0)
+        #
+        # Initial data.
+        #
 
-            self.update_car_information()
+        if self.fixed_spot_id is not None:
+
+            #
+            # The fixed destination is already known,
+            # so load it first and then load only cars
+            # eligible for that spot.
+            #
+
+            self.load_fixed_destination()
 
         else:
 
-            self.reporting_mark_label.setText(
-                "-"
+            self.load_industries(
+                self.fixed_industry_id
             )
 
-            self.car_type_label.setText(
-                "-"
+            self.load_tracks()
+
+    # ==========================================================
+    # LOAD CARS FOR A SPECIFIC SPOT
+    # ==========================================================
+
+    def load_cars_for_spot(
+        self,
+        spot_id,
+    ):
+        """
+        Load only unassigned cars that satisfy all
+        restrictions for the specified spot.
+
+        This is intentionally delegated to
+        CarLocationService so the UI and final
+        assignment use the same validation rules.
+        """
+
+        self.car_combo.blockSignals(
+            True
+        )
+
+        self.car_combo.clear()
+
+        #
+        # No destination means there is no way to
+        # determine which cars are eligible.
+        #
+
+        if spot_id is None:
+
+            self.car_combo.blockSignals(
+                False
             )
 
-            self.length_label.setText(
-                "-"
-            )
-
-            self.location_label.setText(
-                "-"
-            )
+            self.clear_car_information()
 
             self.assign_button.setEnabled(
                 False
             )
 
-    #
-    # Update selected car information
-    #
+            return
 
-    def update_car_information(self):
+        #
+        # Get cars that satisfy the spot restrictions.
+        #
 
-        with SessionLocal() as session:
+        cars = (
+            CarLocationService.get_eligible_cars_for_spot(
+                spot_id
+            )
+        )
 
-            car_id = (
-                self.fixed_car_id
-                if self.mode == "MOVE"
-                else self.car_combo.currentData()
+        for car in cars:
+
+            car_type = (
+                car.car_type
+                if car.car_type
+                else "Unknown"
             )
 
-            if car_id is None:
+            display_text = (
+                f"{car.reporting_mark} "
+                f"{car.number} — "
+                f"{car_type}"
+            )
 
-                return
+            self.car_combo.addItem(
+                display_text,
+                car.id
+            )
+
+        self.car_combo.blockSignals(
+            False
+        )
+
+        #
+        # Cars are available.
+        #
+
+        if self.car_combo.count():
+
+            self.car_combo.setCurrentIndex(
+                0
+            )
+
+            self.update_car_information()
+
+            self.assign_button.setEnabled(
+                True
+            )
+
+            return
+
+        #
+        # No eligible cars.
+        #
+
+        self.clear_car_information()
+
+        self.assign_button.setEnabled(
+            False
+        )
+
+        #
+        # Add an informational item so the user
+        # understands why the list is empty.
+        #
+
+        self.car_combo.blockSignals(
+            True
+        )
+
+        self.car_combo.addItem(
+            "No eligible unassigned cars",
+            None
+        )
+
+        self.car_combo.setCurrentIndex(
+            0
+        )
+
+        self.car_combo.blockSignals(
+            False
+        )
+
+    # ==========================================================
+    # SPOT CHANGED
+    # ==========================================================
+
+    def spot_changed(self):
+        """
+        Reload the car list whenever the destination
+        spot changes.
+
+        This ensures the car list always reflects
+        the restrictions of the selected spot.
+        """
+
+        spot_id = (
+            self.spot_combo.currentData()
+        )
+
+        self.load_cars_for_spot(
+            spot_id
+        )
+
+    # ==========================================================
+    # CLEAR CAR INFORMATION
+    # ==========================================================
+
+    def clear_car_information(self):
+        """
+        Clear the car information display.
+        """
+
+        self.reporting_mark_label.setText(
+            "-"
+        )
+
+        self.car_type_label.setText(
+            "-"
+        )
+
+        self.length_label.setText(
+            "-"
+        )
+
+        self.owner_label.setText(
+            "-"
+        )
+
+        self.status_label.setText(
+            "-"
+        )
+
+        self.location_label.setText(
+            "-"
+        )
+
+    # ==========================================================
+    # UPDATE CAR INFORMATION
+    # ==========================================================
+
+    def update_car_information(self):
+        """
+        Display information about the selected car.
+        """
+
+        car_id = (
+            self.car_combo.currentData()
+        )
+
+        if car_id is None:
+
+            self.clear_car_information()
+
+            #
+            # Only disable the button if there is
+            # no actual car selected.
+            #
+
+            self.assign_button.setEnabled(
+                False
+            )
+
+            return
+
+        with SessionLocal() as session:
 
             car = session.get(
                 Car,
                 car_id
             )
 
-            if not car:
+            if car is None:
+
+                self.clear_car_information()
+
+                self.assign_button.setEnabled(
+                    False
+                )
 
                 return
 
             self.reporting_mark_label.setText(
-                f"{car.reporting_mark} {car.number}"
+                (
+                    f"{car.reporting_mark} "
+                    f"{car.number}"
+                )
             )
 
             self.car_type_label.setText(
@@ -394,23 +531,48 @@ class AssignCarDialog(QDialog):
             )
 
             self.length_label.setText(
-                f"{car.length} ft"
-                if car.length
-                else "Unknown"
+                (
+                    f"{car.length} ft"
+                    if car.length is not None
+                    else "Unknown"
+                )
+            )
+
+            self.owner_label.setText(
+                car.owner or "Unknown"
+            )
+
+            self.status_label.setText(
+                car.status or "Unknown"
             )
 
             self.location_label.setText(
                 car.location or "Unassigned"
             )
 
-    #
-    # Load industries
-    #
+        #
+        # A car is selected, so allow assignment.
+        #
+
+        self.assign_button.setEnabled(
+            True
+        )
+
+    # ==========================================================
+    # LOAD INDUSTRIES
+    # ==========================================================
 
     def load_industries(
         self,
-        selected_industry_id=None
+        selected_industry_id=None,
     ):
+        """
+        Load industries into the destination combo.
+        """
+
+        self.industry_combo.blockSignals(
+            True
+        )
 
         self.industry_combo.clear()
 
@@ -431,10 +593,12 @@ class AssignCarDialog(QDialog):
                     industry.id
                 )
 
-        if selected_industry_id:
+        if selected_industry_id is not None:
 
-            index = self.industry_combo.findData(
-                selected_industry_id
+            index = (
+                self.industry_combo.findData(
+                    selected_industry_id
+                )
             )
 
             if index >= 0:
@@ -443,21 +607,56 @@ class AssignCarDialog(QDialog):
                     index
                 )
 
-    #
-    # Load tracks
-    #
+        self.industry_combo.blockSignals(
+            False
+        )
+
+    # ==========================================================
+    # LOAD TRACKS
+    # ==========================================================
 
     def load_tracks(self):
+        """
+        Load tracks belonging to the selected industry.
+        """
+
+        self.track_combo.blockSignals(
+            True
+        )
 
         self.track_combo.clear()
 
+        self.spot_combo.blockSignals(
+            True
+        )
+
         self.spot_combo.clear()
+
+        self.spot_combo.blockSignals(
+            False
+        )
+
+        #
+        # No longer have a valid destination spot.
+        #
+
+        self.car_combo.clear()
+
+        self.clear_car_information()
+
+        self.assign_button.setEnabled(
+            False
+        )
 
         industry_id = (
             self.industry_combo.currentData()
         )
 
         if industry_id is None:
+
+            self.track_combo.blockSignals(
+                False
+            )
 
             return
 
@@ -482,29 +681,80 @@ class AssignCarDialog(QDialog):
                     track.id
                 )
 
+        self.track_combo.blockSignals(
+            False
+        )
+
         self.load_spots()
 
-    #
-    # Load available spots
-    #
+    # ==========================================================
+    # LOAD AVAILABLE SPOTS
+    # ==========================================================
 
     def load_spots(self):
+        """
+        Load only unoccupied spots belonging to
+        the selected track.
+        """
+
+        self.spot_combo.blockSignals(
+            True
+        )
 
         self.spot_combo.clear()
 
-        track_id = self.track_combo.currentData()
+        #
+        # Destination changed, so clear the current
+        # car list until a spot is selected.
+        #
+
+        self.car_combo.blockSignals(
+            True
+        )
+
+        self.car_combo.clear()
+
+        self.car_combo.blockSignals(
+            False
+        )
+
+        self.clear_car_information()
+
+        self.assign_button.setEnabled(
+            False
+        )
+
+        track_id = (
+            self.track_combo.currentData()
+        )
 
         if track_id is None:
+
+            self.spot_combo.blockSignals(
+                False
+            )
 
             return
 
         with SessionLocal() as session:
 
+            occupied_spot_ids = {
+                row[0]
+                for row in (
+                    session.query(
+                        Car.spot_id
+                    )
+                    .filter(
+                        Car.spot_id.isnot(None)
+                    )
+                    .all()
+                )
+            }
+
             spots = (
                 session.query(Spot)
                 .filter(
-                    Spot.track_id == track_id,
-                    Spot.car == None
+                    Spot.track_id == track_id
                 )
                 .order_by(
                     Spot.spot_number
@@ -514,16 +764,44 @@ class AssignCarDialog(QDialog):
 
             for spot in spots:
 
+                if spot.id in occupied_spot_ids:
+
+                    continue
+
                 self.spot_combo.addItem(
                     f"Spot {spot.spot_number}",
                     spot.id
                 )
 
-    #
-    # Load fixed destination
-    #
+        self.spot_combo.blockSignals(
+            False
+        )
 
-    def load_destination_name(self):
+        #
+        # Select the first available spot and load
+        # cars that satisfy its restrictions.
+        #
+
+        if self.spot_combo.count():
+
+            self.spot_combo.setCurrentIndex(
+                0
+            )
+
+            self.spot_changed()
+
+    # ==========================================================
+    # LOAD FIXED DESTINATION
+    # ==========================================================
+
+    def load_fixed_destination(self):
+        """
+        Display the destination when this dialog
+        was opened for a specific spot.
+
+        The fixed spot is also used to filter the
+        car list.
+        """
 
         with SessionLocal() as session:
 
@@ -532,52 +810,129 @@ class AssignCarDialog(QDialog):
                 self.fixed_spot_id
             )
 
-            if spot:
+            if spot is None:
 
-                track = session.get(
-                    IndustryTrack,
-                    spot.track_id
+                self.destination_label.setText(
+                    "Spot not found"
                 )
 
-                if track:
+                self.clear_car_information()
 
-                    industry = session.get(
-                        Industry,
-                        track.industry_id
-                    )
+                self.assign_button.setEnabled(
+                    False
+                )
 
-                    if industry:
+                return
 
-                        self.destination_label.setText(
-                            f"{industry.name} - "
-                            f"{track.name} - "
-                            f"Spot {spot.spot_number}"
-                        )
+            track = session.get(
+                IndustryTrack,
+                spot.track_id
+            )
 
-    #
-    # Assign / move car
-    #
+            if track is None:
 
-    def assign(self):
+                self.destination_label.setText(
+                    "Track not found"
+                )
+
+                self.clear_car_information()
+
+                self.assign_button.setEnabled(
+                    False
+                )
+
+                return
+
+            industry = session.get(
+                Industry,
+                track.industry_id
+            )
+
+            if industry is None:
+
+                self.destination_label.setText(
+                    "Industry not found"
+                )
+
+                self.clear_car_information()
+
+                self.assign_button.setEnabled(
+                    False
+                )
+
+                return
+
+            #
+            # Show destination.
+            #
+
+            self.destination_label.setText(
+                (
+                    f"{industry.name} - "
+                    f"{track.name} - "
+                    f"Spot {spot.spot_number}"
+                )
+            )
+
+        #
+        # Now that the fixed destination is known,
+        # load only eligible cars.
+        #
+
+        self.load_cars_for_spot(
+            self.fixed_spot_id
+        )
+
+    # ==========================================================
+    # ASSIGN CAR
+    # ==========================================================
+
+    def assign_car(self):
+        """
+        Assign the selected car to the selected spot.
+
+        The final validation is performed by
+        CarLocationService immediately before
+        the database transaction.
+        """
 
         car_id = (
-            self.fixed_car_id
-            if self.mode == "MOVE"
-            else self.car_combo.currentData()
+            self.car_combo.currentData()
         )
 
-        spot_id = (
-            self.fixed_spot_id
-            if self.fixed_spot_id
-            else self.spot_combo.currentData()
-        )
-
-        if car_id is None or spot_id is None:
+        if car_id is None:
 
             QMessageBox.warning(
                 self,
-                "Missing Selection",
-                "Select a car and destination."
+                "No Car",
+                "Please select an eligible car."
+            )
+
+            return
+
+        #
+        # Determine destination.
+        #
+
+        if self.fixed_spot_id is not None:
+
+            spot_id = self.fixed_spot_id
+
+        else:
+
+            spot_id = (
+                self.spot_combo.currentData()
+            )
+
+        if spot_id is None:
+
+            QMessageBox.warning(
+                self,
+                "No Spot",
+                (
+                    "Please select an available "
+                    "destination spot."
+                )
             )
 
             return
@@ -585,56 +940,69 @@ class AssignCarDialog(QDialog):
         #
         # Final safety check.
         #
-        # Even though assigned cars are removed from
-        # the Assign dropdown, check again immediately
-        # before assigning.
+        # This verifies the car has not been assigned
+        # somewhere else since the dialog was opened.
         #
 
-        if self.mode == "ASSIGN":
+        with SessionLocal() as session:
 
-            with SessionLocal() as session:
+            car = session.get(
+                Car,
+                car_id
+            )
 
-                car = session.get(
-                    Car,
-                    car_id
+            if car is None:
+
+                QMessageBox.warning(
+                    self,
+                    "Car Not Found",
+                    "The selected car could not be found."
                 )
 
-                if car is None:
+                return
 
-                    QMessageBox.warning(
-                        self,
-                        "Car Not Found",
-                        "The selected car could not be found."
+            if (
+                car.spot_id is not None
+                or car.track_id is not None
+                or car.industry_id is not None
+            ):
+
+                QMessageBox.warning(
+                    self,
+                    "Car Already Assigned",
+                    (
+                        "This car is already assigned "
+                        "to a location.\n\n"
+                        "Use Move Car to change its "
+                        "current location."
                     )
+                )
 
-                    return
+                #
+                # Refresh the eligible list.
+                #
 
-                if (
-                    car.spot_id is not None
-                    or car.track_id is not None
-                ):
+                self.load_cars_for_spot(
+                    spot_id
+                )
 
-                    QMessageBox.warning(
-                        self,
-                        "Car Already Assigned",
-                        (
-                            "This car is already assigned "
-                            "to a location.\n\n"
-                            "Move the existing assignment "
-                            "instead of assigning the car again."
-                        )
-                    )
-
-                    return
+                return
 
         #
-        # Assign car
+        # Perform the assignment through the
+        # central movement service.
         #
 
-        result = CarLocationService.assign_car_to_spot(
-            car_id,
-            spot_id
+        result, message = (
+            CarLocationService.assign_car_to_spot_with_message(
+                car_id,
+                spot_id
+            )
         )
+
+        #
+        # Successful assignment.
+        #
 
         if result:
 
@@ -642,10 +1010,27 @@ class AssignCarDialog(QDialog):
 
             self.accept()
 
-        else:
+            return
 
-            QMessageBox.warning(
-                self,
-                "Failed",
-                "Unable to complete operation."
+        #
+        # Failed assignment.
+        #
+
+        QMessageBox.warning(
+            self,
+            "Assignment Failed",
+            (
+                message
+                if message
+                else "Unable to assign car."
             )
+        )
+
+        #
+        # Refresh the list in case the reason was
+        # a changed car or spot restriction.
+        #
+
+        self.load_cars_for_spot(
+            spot_id
+        )

@@ -1,14 +1,38 @@
-from PySide6.QtCore import Qt, QAbstractTableModel
+#```python
+from PySide6.QtCore import (
+    Qt,
+    QAbstractTableModel,
+)
 
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from modelrailroadops.database.database import SessionLocal
 
+from modelrailroadops.models.industry import Industry
 from modelrailroadops.models.industry_track import IndustryTrack
+from modelrailroadops.models.spot import Spot
 
 
 class IndustryTrackTableModel(QAbstractTableModel):
+    """
+    Table model for industries and their industry tracks.
+
+    Every industry is displayed, including industries that
+    currently have no tracks.
+
+    Industries without tracks receive a special row with:
+
+        Track Name = "No Tracks"
+        Spots = 0
+        Occupied = 0
+        Available = 0
+
+    The underlying track value for these rows is None.
+
+    Industries are ordered with the most recently created
+    industry first.
+    """
 
     HEADERS = [
         "Industry",
@@ -18,138 +42,369 @@ class IndustryTrackTableModel(QAbstractTableModel):
         "Available",
     ]
 
-
     def __init__(self):
-
         super().__init__()
 
         self.tracks = []
 
         self.refresh()
 
+    #
+    # Refresh
+    #
 
     def refresh(self):
+        """
+        Reload all industries and tracks directly from
+        the database.
+
+        Every industry receives at least one row, even
+        when it has no tracks.
+
+        Industries are ordered by ID descending so the
+        newest industry appears first.
+        """
 
         self.beginResetModel()
 
-        with SessionLocal() as session:
+        try:
 
-            self.tracks = (
-                session.execute(
-                    select(IndustryTrack)
-                    .options(
-                        selectinload(
-                            IndustryTrack.industry
-                        ),
-                        selectinload(
-                            IndustryTrack.spots
-                        ),
+            with SessionLocal() as session:
+
+                industries = (
+                    session.execute(
+                        select(Industry)
+                        .options(
+                            selectinload(
+                                Industry.tracks
+                            )
+                            .selectinload(
+                                IndustryTrack.spots
+                            )
+                            .selectinload(
+                                Spot.car
+                            )
+                        )
+                        .order_by(
+                            Industry.id.desc()
+                        )
                     )
-                    .order_by(
-                        IndustryTrack.industry_id,
-                        IndustryTrack.name,
+                    .scalars()
+                    .all()
+                )
+
+                rows = []
+
+                for industry in industries:
+
+                    #
+                    # Industry has no tracks.
+                    #
+                    # Still create a row so the industry
+                    # can be selected and its first track
+                    # can be added.
+                    #
+
+                    if not industry.tracks:
+
+                        rows.append(
+                            {
+                                "industry_id": industry.id,
+                                "industry_name": industry.name,
+                                "industry": industry,
+                                "track_id": None,
+                                "track_name": "No Tracks",
+                                "track": None,
+                                "spot_total": 0,
+                                "spot_occupied": 0,
+                                "spot_available": 0,
+                            }
+                        )
+
+                        continue
+
+                    #
+                    # Industry has one or more tracks.
+                    #
+
+                    sorted_tracks = sorted(
+                        industry.tracks,
+                        key=lambda item: (
+                            item.name or ""
+                        ).lower(),
                     )
-                )
-                .scalars()
-                .all()
-            )
 
+                    for track in sorted_tracks:
 
-            # Detach safe copies
-            for track in self.tracks:
+                        spot_total = len(
+                            track.spots
+                        )
 
-                track.industry_name = (
-                    track.industry.name
-                    if track.industry
-                    else ""
-                )
+                        spot_occupied = sum(
+                            1
+                            for spot in track.spots
+                            if spot.car is not None
+                        )
 
-                track.spot_total = len(
-                    track.spots
-                )
+                        spot_available = (
+                            spot_total
+                            - spot_occupied
+                        )
 
-                track.spot_occupied = sum(
-                    1
-                    for spot in track.spots
-                    if spot.car
-                )
+                        rows.append(
+                            {
+                                "industry_id": industry.id,
+                                "industry_name": industry.name,
+                                "industry": industry,
+                                "track_id": track.id,
+                                "track_name": track.name,
+                                "track": track,
+                                "spot_total": spot_total,
+                                "spot_occupied": spot_occupied,
+                                "spot_available": spot_available,
+                            }
+                        )
 
-                track.spot_available = (
-                    track.spot_total
-                    -
-                    track.spot_occupied
-                )
+                self.tracks = rows
 
+        finally:
 
-        self.endResetModel()
+            self.endResetModel()
 
+    #
+    # Row count
+    #
 
+    def rowCount(
+        self,
+        parent=None,
+    ):
 
-    def rowCount(self, parent=None):
+        return len(
+            self.tracks
+        )
 
-        return len(self.tracks)
+    #
+    # Column count
+    #
 
+    def columnCount(
+        self,
+        parent=None,
+    ):
 
+        return len(
+            self.HEADERS
+        )
 
-    def columnCount(self, parent=None):
-
-        return len(self.HEADERS)
-
-
+    #
+    # Header data
+    #
 
     def headerData(
         self,
         section,
         orientation,
-        role
+        role,
     ):
 
-        if (
-            role == Qt.DisplayRole
-            and orientation == Qt.Horizontal
-        ):
+        if role != Qt.DisplayRole:
 
-            return self.HEADERS[section]
+            return None
+
+        if orientation == Qt.Horizontal:
+
+            if 0 <= section < len(
+                self.HEADERS
+            ):
+
+                return self.HEADERS[
+                    section
+                ]
+
+        elif orientation == Qt.Vertical:
+
+            return section + 1
 
         return None
 
+    #
+    # Data
+    #
 
-
-    def data(self, index, role):
+    def data(
+        self,
+        index,
+        role,
+    ):
 
         if not index.isValid():
 
             return None
 
+        row_number = index.row()
+
+        if row_number < 0:
+
+            return None
+
+        if row_number >= len(
+            self.tracks
+        ):
+
+            return None
+
+        row = self.tracks[
+            row_number
+        ]
+
+        #
+        # Display data
+        #
 
         if role == Qt.DisplayRole:
 
-            track = self.tracks[index.row()]
+            column = index.column()
 
+            if column == 0:
 
-            if index.column() == 0:
+                return row[
+                    "industry_name"
+                ]
 
-                return track.industry_name
+            if column == 1:
 
+                return row[
+                    "track_name"
+                ]
 
-            if index.column() == 1:
+            if column == 2:
 
-                return track.name
+                return row[
+                    "spot_total"
+                ]
 
+            if column == 3:
 
-            if index.column() == 2:
+                return row[
+                    "spot_occupied"
+                ]
 
-                return track.spot_total
+            if column == 4:
 
+                return row[
+                    "spot_available"
+                ]
 
-            if index.column() == 3:
+        #
+        # Alignment
+        #
 
-                return track.spot_occupied
+        if role == Qt.TextAlignmentRole:
 
+            column = index.column()
 
-            if index.column() == 4:
+            if column in (
+                2,
+                3,
+                4,
+            ):
 
-                return track.spot_available
-
+                return (
+                    Qt.AlignCenter
+                    | Qt.AlignVCenter
+                )
 
         return None
+
+    #
+    # Get industry for a row
+    #
+
+    def get_industry(
+        self,
+        row,
+    ):
+
+        if not (
+            0 <= row < len(
+                self.tracks
+            )
+        ):
+
+            return None
+
+        return self.tracks[
+            row
+        ].get(
+            "industry"
+        )
+
+    #
+    # Get track for a row
+    #
+
+    def get_track(
+        self,
+        row,
+    ):
+
+        if not (
+            0 <= row < len(
+                self.tracks
+            )
+        ):
+
+            return None
+
+        return self.tracks[
+            row
+        ].get(
+            "track"
+        )
+
+    #
+    # Get industry ID for a row
+    #
+
+    def get_industry_id(
+        self,
+        row,
+    ):
+
+        if not (
+            0 <= row < len(
+                self.tracks
+            )
+        ):
+
+            return None
+
+        return self.tracks[
+            row
+        ].get(
+            "industry_id"
+        )
+
+    #
+    # Get track ID for a row
+    #
+
+    def get_track_id(
+        self,
+        row,
+    ):
+
+        if not (
+            0 <= row < len(
+                self.tracks
+            )
+        ):
+
+            return None
+
+        return self.tracks[
+            row
+        ].get(
+            "track_id"
+        )

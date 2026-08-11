@@ -156,6 +156,18 @@ class RosterTab(QWidget):
         )
 
         #
+        # Sort using displayed text.
+        #
+        # This allows Type to sort alphabetically
+        # without changing the actual car_type values
+        # stored in the database.
+        #
+
+        self.proxy.setSortRole(
+            Qt.DisplayRole
+        )
+
+        #
         # Table
         #
 
@@ -243,6 +255,56 @@ class RosterTab(QWidget):
 
         self.refresh()
 
+        #
+        # Start the roster sorted by Car Type.
+        #
+
+        self.proxy.sort(
+            3,
+            Qt.AscendingOrder
+        )
+
+        self.table.horizontalHeader().setSortIndicator(
+            3,
+            Qt.AscendingOrder
+        )
+
+    #
+    # Refresh when the tab becomes visible
+    #
+
+    def showEvent(self, event):
+
+        super().showEvent(
+            event
+        )
+
+        #
+        # Reload the roster from the database
+        # every time the user returns to the tab.
+        #
+        # This is important because cars can be
+        # assigned, moved, or released from other
+        # tabs while this model still contains
+        # older Car objects.
+        #
+
+        self.refresh()
+
+        #
+        # Keep the roster sorted by Car Type.
+        #
+
+        self.proxy.sort(
+            3,
+            Qt.AscendingOrder
+        )
+
+        self.table.horizontalHeader().setSortIndicator(
+            3,
+            Qt.AscendingOrder
+        )
+
     #
     # Refresh
     #
@@ -286,6 +348,11 @@ class RosterTab(QWidget):
         if dialog.exec():
 
             self.refresh()
+
+            self.proxy.sort(
+                3,
+                Qt.AscendingOrder
+            )
 
     #
     # Edit car
@@ -331,6 +398,11 @@ class RosterTab(QWidget):
         if dialog.exec():
 
             self.refresh()
+
+            self.proxy.sort(
+                3,
+                Qt.AscendingOrder
+            )
 
     #
     # Delete car
@@ -386,6 +458,11 @@ class RosterTab(QWidget):
         )
 
         self.refresh()
+
+        self.proxy.sort(
+            3,
+            Qt.AscendingOrder
+        )
 
     #
     # Export CSV
@@ -460,22 +537,26 @@ class RosterTab(QWidget):
             return
 
         #
-        # The model's import_from_csv()
-        # already refreshes the model.
-        #
-        # Refresh the complete roster through
-        # the normal UI refresh path so the
-        # proxy, table, columns, and count
-        # are all updated consistently.
+        # Refresh through the normal UI path.
         #
 
         self.refresh()
 
-        total = self.model.rowCount()
+        #
+        # Reapply Type sorting after import.
+        #
 
-        #
-        # Show import results.
-        #
+        self.proxy.sort(
+            3,
+            Qt.AscendingOrder
+        )
+
+        self.table.horizontalHeader().setSortIndicator(
+            3,
+            Qt.AscendingOrder
+        )
+
+        total = self.model.rowCount()
 
         QMessageBox.information(
             self,

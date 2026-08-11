@@ -1,0 +1,1660 @@
+# ModelRailroadOps — Project Status & Development Handoff
+
+**Project:** Model Railroad Operations
+**Repository:** `ModelRailroadOps`
+**GitHub repository:** `jmmile/ModelRailroadOp`
+**Platform:** Windows 11
+**Language:** Python
+**Python environment:** `.venv-1`
+**Python version:** 3.13.14
+**GUI:** PySide6 / Qt
+**Database:** SQLite
+**ORM:** SQLAlchemy 2.0.51
+**IDE:** Visual Studio Code
+**Database file:** `data/railroad.db`
+
+---
+
+# 1. Project Purpose
+
+ModelRailroadOps is a desktop application for managing a model railroad operating system.
+
+The long-term goal is to manage:
+
+* Railroad cars
+* Industries
+* Industry tracks
+* Individual spots
+* Car locations
+* Car loading/empty status
+* Spot restrictions
+* Car assignments
+* Switching operations
+* Eventually, switch lists / operating sessions
+
+The desired location hierarchy for cars is:
+
+**Industry → Track → Spot**
+
+For example:
+
+`Cascade Feed → Grain Track → Spot 3 → BN 123456`
+
+The application is being developed incrementally so that each major feature is fully functional before moving to the next.
+
+---
+
+# 2. Current Development Philosophy
+
+The project is being developed in small, testable stages.
+
+A major lesson from recent development is that changing several files at once makes debugging unnecessarily difficult.
+
+Therefore:
+
+* Change one logical component at a time.
+* Run the application after each significant change.
+* Test the exact behavior that was changed.
+* Use diagnostic output when a UI event is not behaving as expected.
+* Once the feature works, remove temporary debugging output.
+* Do not assume a UI problem is a database problem without testing the layers separately.
+
+The preferred coding workflow is:
+
+1. Identify the exact file involved.
+2. Replace the complete file.
+3. Run the application.
+4. Test one specific behavior.
+5. Report the actual result.
+6. Only then move to the next file/change.
+
+---
+
+# 3. Important User Preference for Code Responses
+
+When code changes are requested, provide the **complete corrected file**, not a partial snippet.
+
+The user prefers complete file replacements so the entire file can be copied directly into the project.
+
+Also:
+
+**Do NOT label code blocks with `python`.**
+
+The user specifically requested that delivered files should not start with:
+
+```text
+Python
+```
+
+or use a `python` language identifier after the opening backticks.
+
+The safest format is an unlabeled code block when code must be displayed.
+
+---
+
+# 4. Project Structure
+
+The project uses a `src` layout.
+
+Important structure includes:
+
+```text
+ModelRailroadOps/
+│
+├── data/
+│   └── railroad.db
+│
+├── src/
+│   └── modelrailroadops/
+│       ├── __init__.py
+│       ├── __main__.py
+│       │
+│       ├── database/
+│       │   ├── base.py
+│       │   └── database.py
+│       │
+│       ├── models/
+│       │   ├── car.py
+│       │   ├── industry.py
+│       │   ├── industry_track.py
+│       │   └── spot.py
+│       │
+│       ├── services/
+│       │   ├── car_service.py
+│       │   ├── industry_service.py
+│       │   ├── industry_track_service.py
+│       │   └── spot_service.py
+│       │
+│       └── ui/
+│           ├── app.py
+│           ├── main_window.py
+│           ├── styles.py
+│           │
+│           ├── dialogs/
+│           │   ├── add_industry_dialog.py
+│           │   ├── add_industry_track_dialog.py
+│           │   └── add_spot_dialog.py
+│           │
+│           ├── models/
+│           │   ├── car_table_model.py
+│           │   ├── industry_table_model.py
+│           │   └── industry_track_table_model.py
+│           │
+│           └── widgets/
+│               ├── industry_tab.py
+│               └── industry_tracks_widget.py
+│
+└── various test/seed/diagnostic scripts
+```
+
+The exact file list may have additional files, but the above are the important components for the current development phase.
+
+---
+
+# 5. Running the Application
+
+The application is normally started with:
+
+```text
+python -m modelrailroadops
+```
+
+The project previously had import/path issues because of the `src` layout. Those were resolved by ensuring the application startup correctly exposes the `src` directory.
+
+The `__main__.py` imports the application/main window and starts the application.
+
+---
+
+# 6. Database
+
+The project uses SQLite with SQLAlchemy.
+
+The database contains at least these major entities:
+
+* `cars`
+* `industries`
+* `industry_tracks`
+* `spots`
+
+Relationships are being built so that the hierarchy is:
+
+```text
+Industry
+   └── IndustryTrack
+          └── Spot
+                 └── Car
+```
+
+---
+
+# 7. Industry Model
+
+The Industry model represents a railroad-served industry.
+
+Important fields:
+
+* `id`
+* `name`
+* `railroad`
+* `location`
+* `notes`
+
+An industry has a relationship to its tracks.
+
+The industry name has a unique constraint:
+
+```text
+uq_industry_name
+```
+
+This was added because duplicate industries were previously being created.
+
+Duplicate protection also exists in `IndustryService.add()`.
+
+---
+
+# 8. Industry Track Model
+
+The `IndustryTrack` model represents a track belonging to an industry.
+
+Important fields:
+
+* `id`
+* `industry_id`
+* `name`
+
+The model contains a unique constraint preventing two tracks with the same name under the same industry:
+
+```text
+uq_industry_track_name
+```
+
+The track has relationships to:
+
+* Parent industry
+* Individual spots
+* Cars assigned to the track
+
+Important relationship:
+
+```text
+spots = relationship(
+    "Spot",
+    back_populates="track",
+    cascade="all, delete-orphan",
+    order_by="Spot.spot_number",
+)
+```
+
+This means deleting a track can cascade-delete its spots, provided the application/database rules allow the track to be deleted.
+
+Cars have a relationship to the track as well.
+
+---
+
+# 9. Spot Model / Functionality
+
+Spots are individual car positions on an industry track.
+
+A spot can contain a car or be empty.
+
+Spot information currently includes:
+
+* Spot number
+* Name
+* Description
+* Maximum length
+* Allowed car type
+* Allowed owner
+* Hazardous allowed
+* Load only
+* Empty only
+* Notes
+
+The Industry Tracks tab displays spots in a dedicated table.
+
+The current spot table columns are:
+
+1. Spot
+2. Name
+3. Description
+4. Max Length
+5. Allowed Car Type
+6. Allowed Owner
+7. Load / Empty
+8. Status
+
+The status can display:
+
+```text
+Empty
+```
+
+or:
+
+```text
+Occupied - BN 123456
+```
+
+when a car is assigned.
+
+---
+
+# 10. Industry Tracks Table
+
+The Industry Tracks table currently displays:
+
+1. Industry
+2. Track Name
+3. Spots
+4. Occupied
+5. Available
+
+The table model is:
+
+`IndustryTrackTableModel`
+
+It deliberately displays **every industry**, including industries that have no tracks.
+
+For an industry without tracks, it displays:
+
+```text
+Track Name = No Tracks
+Spots = 0
+Occupied = 0
+Available = 0
+```
+
+The underlying track value for such a row is:
+
+```text
+None
+```
+
+This is intentional.
+
+It allows the user to select an industry that has no tracks and immediately use **Add Track** to create its first track.
+
+---
+
+# 11. Track Sorting
+
+The Industry Tracks table was recently changed so that tracks are sorted alphabetically within each industry.
+
+The overall industry order is alphabetical.
+
+For each industry:
+
+```text
+sorted_tracks = sorted(
+    industry.tracks,
+    key=lambda item: (
+        item.name or ""
+    ).lower(),
+)
+```
+
+The result is that a newly added track appears in its proper alphabetical position rather than simply being appended to the bottom of the table.
+
+This functionality is currently working.
+
+---
+
+# 12. Industry Capacity Calculations
+
+The Industry service calculates capacity while the SQLAlchemy session is still active.
+
+For each industry:
+
+* `capacity_total`
+* `capacity_occupied`
+* `capacity_available`
+* `capacity_percent`
+
+are calculated from the industry's tracks and spots.
+
+The calculations are based on actual spots.
+
+For example:
+
+```text
+Total spots = 5
+Occupied = 2
+Available = 3
+Capacity = 40%
+```
+
+An industry with zero spots has:
+
+```text
+Total = 0
+Occupied = 0
+Available = 0
+Percent = 0
+```
+
+---
+
+# 13. Industry Tracks Widget
+
+The primary widget for current development is:
+
+`industry_tracks_widget.py`
+
+Class:
+
+`IndustryTracksWidget`
+
+It contains:
+
+### Industry Track table
+
+Displays industries and their tracks.
+
+### Track buttons
+
+* Add Track
+* Edit Track
+* Delete Track
+
+### Spot section
+
+Displays the spots belonging to the selected track.
+
+### Spot buttons
+
+* Add Spot
+* Edit Spot
+* Delete Spot
+
+### Refresh button
+
+Refreshes the current information from the database.
+
+---
+
+# 14. Current Track Behavior
+
+The current track behavior is:
+
+### Add Track
+
+The user selects an industry.
+
+They click:
+
+**Add Track**
+
+The dialog asks for the track information, including the number of spots.
+
+The track is added to the selected industry.
+
+The table is refreshed.
+
+The track appears in the correct alphabetical position.
+
+---
+
+### Edit Track
+
+The user selects an actual track.
+
+They click:
+
+**Edit Track**
+
+The existing track information is loaded into the dialog.
+
+The track can be renamed and its spot capacity can be changed subject to the existing business rules.
+
+---
+
+# 15. Delete Track Behavior — CURRENTLY WORKING
+
+This was the most recent major debugging issue.
+
+The final working behavior is:
+
+### "No Tracks" row
+
+Cannot be deleted.
+
+It is not an actual track.
+
+The model returns:
+
+```text
+track = None
+```
+
+for these rows.
+
+Therefore:
+
+**Delete Track = disabled**
+
+---
+
+### Actual track with zero spots
+
+Can be deleted.
+
+Example:
+
+```text
+Industry: Test Industry
+Track: New Track
+Spots: 0
+Occupied: 0
+Available: 0
+```
+
+The Delete Track button should be enabled.
+
+---
+
+### Actual track with empty spots
+
+Can be deleted.
+
+Example:
+
+```text
+Spots: 3
+Occupied: 0
+Available: 3
+```
+
+The Delete Track button should be enabled.
+
+---
+
+### Actual track containing cars
+
+Cannot be deleted.
+
+Example:
+
+```text
+Spots: 3
+Occupied: 1
+Available: 2
+```
+
+The Delete Track button must be disabled.
+
+The application also performs a final database check immediately before deletion.
+
+---
+
+# 16. Delete Track Debugging History
+
+The Delete Track problem was initially difficult because the button appeared not to enable.
+
+Diagnostic output eventually showed:
+
+For a "No Tracks" row:
+
+```text
+Selected row count: 1
+Selected rows: [0]
+get_selected_row(): {
+    'industry_id': 10,
+    'industry_name': 'r',
+    'track_id': None,
+    'track_name': 'No Tracks',
+    'track': None,
+    ...
+}
+Selected industry: r
+Selected track: None
+Selected track ID: None
+Delete Track enabled: False
+```
+
+This was correct behavior.
+
+For a real track:
+
+```text
+Selected row count: 1
+Selected rows: [3]
+get_selected_row(): {
+    'industry_id': 7,
+    'industry_name': 'Black Rock Mining Company',
+    'track_id': 12,
+    'track_name': 'Load Track 1',
+    'track': <IndustryTrack ...>,
+    ...
+}
+Selected industry: Black Rock Mining Company
+Selected track: Load Track 1
+Selected track ID: 12
+Delete Track enabled: True
+```
+
+The final test demonstrated:
+
+```text
+Selected track: Loading Dock 1
+Selected track ID: 10
+track_has_cars(): False
+Delete confirmation result: 16384
+Final track_has_cars(): False
+Calling IndustryTrackService.delete()
+Track ID: 10
+IndustryTrackService.delete() result: True
+DELETE TRACK SUCCESSFUL.
+```
+
+Therefore:
+
+**Delete Track is now working.**
+
+Temporary debugging output should eventually be removed once the feature is considered stable.
+
+---
+
+# 17. Add Spot Behavior — CURRENTLY WORKING
+
+The user recently tested:
+
+> add a spot
+
+The spot was added successfully.
+
+No success popup was displayed.
+
+This is considered desirable.
+
+The spot should immediately appear in the Spots table.
+
+The track's capacity should update accordingly.
+
+---
+
+# 18. Delete Spot Behavior — CURRENTLY WORKING
+
+The user also tested:
+
+> delete a spot
+
+The spot was deleted successfully.
+
+No success popup was displayed.
+
+This is also considered desirable.
+
+The application should simply update the visible UI rather than displaying unnecessary success dialogs.
+
+---
+
+# 19. Spot Delete Rules
+
+The current intended rules are:
+
+### Empty spot
+
+Can be deleted.
+
+### Occupied spot
+
+Cannot be deleted.
+
+The Delete Spot button should be disabled when the selected spot contains a car.
+
+The application also performs a final occupancy check immediately before deletion.
+
+This prevents a race/stale-state situation where the UI says the spot is empty but a car was assigned after the initial check.
+
+---
+
+# 20. Current User Interface Behavior
+
+The application intentionally does NOT display success message boxes for routine operations.
+
+For example:
+
+### Add spot
+
+Preferred:
+
+```text
+Click Add Spot
+        ↓
+Spot is created
+        ↓
+Spot immediately appears in table
+```
+
+No:
+
+```text
+"Spot added successfully!"
+```
+
+popup.
+
+Likewise:
+
+### Delete spot
+
+Preferred:
+
+```text
+Click Delete Spot
+        ↓
+Confirm deletion
+        ↓
+Spot disappears
+        ↓
+Counts update
+```
+
+No success popup.
+
+The visual change is the confirmation.
+
+---
+
+# 21. Existing Car Model
+
+The Car model currently contains fields including:
+
+* Reporting mark
+* Number
+* Owner
+* Car type
+* Length
+* Status
+* Location
+
+The car roster already exists as part of the application.
+
+The project is now moving toward replacing/expanding the simple location concept with the more detailed:
+
+```text
+Industry
+Track
+Spot
+```
+
+relationship.
+
+---
+
+# 22. Current Car Location Direction
+
+The long-term desired structure is:
+
+```text
+Car
+ ├── Industry
+ ├── Track
+ └── Spot
+```
+
+or, depending on the final database relationship design, the car may primarily reference the spot, with the spot providing the track and industry hierarchy.
+
+This should be decided carefully before implementing the assignment UI.
+
+The goal is to avoid redundant location data.
+
+Ideally, if a car is assigned to:
+
+```text
+Spot 3
+```
+
+the application can determine:
+
+```text
+Spot 3
+  → Track
+  → Industry
+```
+
+without maintaining conflicting duplicate location fields.
+
+---
+
+# 23. IndustryService
+
+Current `IndustryService` responsibilities include:
+
+### `get_all()`
+
+Loads:
+
+* Industries
+* Tracks
+* Spots
+* Cars associated with spots
+
+using SQLAlchemy eager loading.
+
+It also calculates industry capacity.
+
+### `add()`
+
+Adds an industry.
+
+It checks for an existing industry with the same name.
+
+Duplicate names are not allowed.
+
+The service previously contained extensive debugging output such as:
+
+```text
+IndustryService.add(): ADD REQUEST
+IndustryService.add(): Industry flushed.
+IndustryService.add(): COMMIT COMPLETE.
+IndustryService.add(): VERIFICATION SUCCESS.
+```
+
+This debugging output has been removed/reduced during recent cleanup.
+
+The final desired behavior is a clean console when running the application normally.
+
+### `update()`
+
+Updates an industry.
+
+It checks for another industry using the requested name.
+
+### `delete()`
+
+Deletes an industry.
+
+---
+
+# 24. IndustryTrackService
+
+Current responsibilities include:
+
+* Get tracks
+* Add tracks
+* Update tracks
+* Delete tracks
+* Duplicate prevention
+
+Track uniqueness is based on:
+
+```text
+industry_id + track name
+```
+
+The Delete Track service has now been verified to successfully delete a track.
+
+The application layer performs occupancy checks before calling it.
+
+---
+
+# 25. SpotService
+
+Current responsibilities include:
+
+* Add spot
+* Get spots for a track
+* Update spot
+* Delete spot
+
+The UI uses:
+
+```text
+SpotService.get_by_track(track.id)
+```
+
+to load spots for the selected track.
+
+---
+
+# 26. Current Industry Tracks UI Selection Logic
+
+The table uses:
+
+```text
+QAbstractItemView.SelectRows
+```
+
+and:
+
+```text
+SingleSelection
+```
+
+The table's selection model is connected to:
+
+```text
+track_selection_changed()
+```
+
+The selected row is resolved through:
+
+```text
+get_selected_row()
+```
+
+which returns the dictionary from:
+
+```text
+self.model.tracks
+```
+
+The selected industry is obtained from:
+
+```text
+get_selected_industry()
+```
+
+The selected actual track is obtained from:
+
+```text
+get_selected_track()
+```
+
+For a "No Tracks" row:
+
+```text
+get_selected_track()
+```
+
+returns:
+
+```text
+None
+```
+
+This distinction is important and must be preserved.
+
+---
+
+# 27. Important UI State Rules
+
+### Industry selected, no track
+
+Enabled:
+
+* Add Track
+
+Disabled:
+
+* Edit Track
+* Delete Track
+* Add Spot
+* Edit Spot
+* Delete Spot
+
+---
+
+### Actual track selected
+
+Enabled:
+
+* Add Track
+* Edit Track
+* Delete Track if no cars
+* Add Spot
+
+---
+
+### Actual spot selected
+
+Enabled:
+
+* Edit Spot
+* Delete Spot if empty
+
+---
+
+# 28. Recent Debugging Lesson
+
+A major issue occurred because the Delete Track button was repeatedly modified without first determining whether:
+
+1. The row was actually selected.
+2. The selected row contained an actual track.
+3. `get_selected_track()` returned the expected object.
+4. `track_has_cars()` returned the expected value.
+5. The button's enabled state was actually being changed.
+6. The delete method was actually being called.
+7. The service actually deleted the database record.
+
+The final successful diagnostic process checked each layer.
+
+That should be the preferred approach for future UI bugs.
+
+---
+
+# 29. Recommended Testing Method Going Forward
+
+For each new feature:
+
+## Layer 1 — Database/service
+
+Verify the service works independently.
+
+Example:
+
+```text
+Add spot
+Get spot
+Update spot
+Delete spot
+```
+
+---
+
+## Layer 2 — UI selection
+
+Verify:
+
+```text
+Selected row
+Selected industry
+Selected track
+Selected spot
+```
+
+before changing button logic.
+
+---
+
+## Layer 3 — Button state
+
+Print only the information necessary to answer:
+
+```text
+What is selected?
+Why should the button be enabled/disabled?
+```
+
+---
+
+## Layer 4 — Actual operation
+
+Verify that the service method is actually called.
+
+Example:
+
+```text
+Calling IndustryTrackService.delete()
+Track ID: 10
+```
+
+---
+
+## Layer 5 — Database result
+
+Verify the operation actually happened.
+
+Example:
+
+```text
+IndustryTrackService.delete() result: True
+```
+
+---
+
+## Layer 6 — UI refresh
+
+Verify:
+
+* Row disappears/appears
+* Counts change
+* Selection updates
+* Buttons update
+
+---
+
+# 30. Debug Output Should Be Temporary
+
+Debug output was extremely useful for fixing Delete Track.
+
+Examples included:
+
+```text
+Selected track ID: 10
+track_has_cars(): False
+Delete Track enabled: True
+```
+
+and:
+
+```text
+Calling IndustryTrackService.delete()
+Track ID: 10
+IndustryTrackService.delete() result: True
+```
+
+Once a feature works, unnecessary diagnostic output should be removed.
+
+The normal command:
+
+```text
+python -m modelrailroadops
+```
+
+should ideally produce no application debug output during normal operation.
+
+---
+
+# 31. Current Seed/Test Data
+
+The project has seed scripts used for populating:
+
+* Cars
+* Industries
+* Industry tracks
+* Spots
+
+Examples of existing/previous test industries and tracks include:
+
+```text
+GBW Railcar Services
+    Repair Track
+
+Black Rock Mining Company
+    Load Track 1
+    Load Track 2
+
+Glacier Cold Storage
+    Loading Dock 1
+    Loading Dock 2
+
+Acme Transfer Company
+    Loading Dock
+    Receiving Dock
+
+Rustler Cattle Co.
+    Loading Dock
+
+Cascade Feed
+    Grain Track
+
+Pacific Paper Mill
+    Boxcar Track
+    Pulp Track
+
+Wilhaeuser Lumber Company
+    Receiving Track
+    Shipping Track
+```
+
+There have also been temporary test industries such as:
+
+```text
+r
+test
+```
+
+The current database should not be assumed to contain only production-quality seed data; some entries were deliberately created during testing.
+
+---
+
+# 32. Duplicate Industry Problem — RESOLVED
+
+A duplicate industry issue was previously discovered involving:
+
+```text
+Wilhaeuser Lumber Company
+```
+
+Two industry records existed with the same name but different tracks.
+
+The industry model now has a unique constraint:
+
+```text
+uq_industry_name
+```
+
+and `IndustryService.add()` checks for an existing industry before adding one.
+
+The track model likewise prevents duplicate track names within an industry.
+
+---
+
+# 33. Important Database Constraint Work
+
+Metadata checking scripts were created during development to verify the actual SQLite constraints.
+
+The project has used scripts such as:
+
+```text
+check_duplicates.py
+inspect_duplicate.py
+check_constraints.py
+check_metadata.py
+```
+
+These were useful while debugging duplicate records and schema constraints.
+
+---
+
+# 34. Main Window
+
+The `MainWindow` is responsible for the major application tabs.
+
+It currently integrates the Industry Tracks widget.
+
+One previous issue involved:
+
+```text
+ImportError: cannot import name 'IndustryTracksWidget'
+```
+
+This occurred because the widget file did not contain the expected class after an incomplete/incorrect replacement.
+
+The correct class must remain:
+
+```text
+class IndustryTracksWidget(QWidget):
+```
+
+and the module must be importable by:
+
+```text
+from modelrailroadops.ui.widgets.industry_tracks_widget import (
+    IndustryTracksWidget,
+)
+```
+
+Any future complete replacement of that file must preserve that class name.
+
+---
+
+# 35. Industry Tab
+
+The Industry tab manages industries.
+
+It has been connected to the Industry service and the Industry Tracks functionality.
+
+Previously, adding an industry produced diagnostic messages such as:
+
+```text
+IndustryTab: industry_changed emitted after add.
+MainWindow: Industry Tracks refresh COMPLETE
+```
+
+These were debugging messages and should not be part of the normal final application behavior.
+
+The application now relies on normal UI refresh behavior rather than excessive console logging.
+
+---
+
+# 36. Current Project Phase
+
+The project has effectively completed the foundation of:
+
+## Phase 1 — Industry / Industry Track / Spot Management
+
+Completed:
+
+* Industry management
+* Industry duplicate prevention
+* Industry track management
+* Track duplicate prevention
+* Track sorting
+* Tracks with zero spots
+* Track capacity display
+* Spot creation
+* Spot editing
+* Spot deletion
+* Occupancy detection
+* Track deletion
+* Protection against deleting tracks containing cars
+* Protection against deleting occupied spots
+
+This phase is sufficiently functional to move forward.
+
+---
+
+# 37. NEXT PHASE — Assign Cars to Spots
+
+The next major feature should be:
+
+# Car-to-Spot Assignment
+
+The first implementation should be deliberately simple.
+
+Do NOT immediately implement every restriction.
+
+First establish the basic workflow:
+
+```text
+Select an empty spot
+        ↓
+Click "Assign Car"
+        ↓
+Display available cars
+        ↓
+Select a car
+        ↓
+Assign car to spot
+        ↓
+Refresh spot
+        ↓
+Status becomes:
+Occupied - ReportingMark Number
+        ↓
+Track counts update
+```
+
+For example:
+
+```text
+Spot 3
+Status: Empty
+```
+
+becomes:
+
+```text
+Spot 3
+Status: Occupied - BN 123456
+```
+
+And the track changes from:
+
+```text
+Spots: 5
+Occupied: 0
+Available: 5
+```
+
+to:
+
+```text
+Spots: 5
+Occupied: 1
+Available: 4
+```
+
+---
+
+# 38. Car Assignment Should Be Developed Incrementally
+
+Recommended order:
+
+### Step 1
+
+Confirm the current Car database relationship to Spot.
+
+### Step 2
+
+Add the minimum service operation:
+
+```text
+assign_car_to_spot()
+```
+
+### Step 3
+
+Add a simple UI button:
+
+```text
+Assign Car
+```
+
+### Step 4
+
+Display available cars.
+
+### Step 5
+
+Assign one car to one empty spot.
+
+### Step 6
+
+Refresh the UI.
+
+### Step 7
+
+Add:
+
+```text
+Remove Car
+```
+
+### Step 8
+
+Add:
+
+```text
+Move Car
+```
+
+### Step 9
+
+Only after that, implement spot restrictions.
+
+---
+
+# 39. Spot Restrictions — FUTURE
+
+Once basic assignment works, the application should enforce:
+
+### Maximum length
+
+A car longer than the spot's maximum length should not be assignable.
+
+### Allowed car type
+
+A spot can restrict which car types it accepts.
+
+### Allowed owner
+
+A spot can restrict which railroad/owner can use it.
+
+### Loaded / Empty
+
+A spot may be:
+
+```text
+Loaded Only
+```
+
+or:
+
+```text
+Empty Only
+```
+
+or:
+
+```text
+Loaded / Empty
+```
+
+### Hazardous
+
+The application can eventually prevent hazardous cars from entering spots where:
+
+```text
+hazardous_allowed = False
+```
+
+These restrictions should be implemented **after** basic car assignment is proven to work.
+
+---
+
+# 40. Future Car Movement
+
+Eventually a car should be movable between spots.
+
+Example:
+
+```text
+Cascade Feed
+    Grain Track
+        Spot 2
+```
+
+moves to:
+
+```text
+Pacific Paper Mill
+    Boxcar Track
+        Spot 1
+```
+
+The application should automatically update the car's location.
+
+The user should not have to manually edit multiple independent location fields.
+
+---
+
+# 41. Future Operating Logic
+
+After car/spot assignment is stable, the project can move toward actual railroad operations.
+
+Potential future phases:
+
+### Phase 3
+
+Car movement / spot assignment.
+
+### Phase 4
+
+Loads and destinations.
+
+### Phase 5
+
+Switching operations.
+
+### Phase 6
+
+Switch lists.
+
+### Phase 7
+
+Operating sessions.
+
+### Phase 8
+
+Advanced routing and car-flow logic.
+
+The exact roadmap can be refined as the application develops.
+
+---
+
+# 42. Immediate Recommended Task
+
+The next task should be:
+
+**Inspect the current Car model and determine the cleanest database relationship between Car and Spot.**
+
+Before writing the Assign Car UI, establish exactly how the car is connected to:
+
+```text
+Spot
+Track
+Industry
+```
+
+This prevents building UI around a database structure that later needs to be replaced.
+
+The next code work should therefore begin with the **Car model and CarService**, not the UI.
+
+---
+
+# 43. Current Known Working State
+
+As of this handoff:
+
+### Application startup
+
+Working:
+
+```text
+python -m modelrailroadops
+```
+
+### Industries
+
+Working.
+
+### Industry duplicate protection
+
+Working.
+
+### Industry Tracks
+
+Working.
+
+### Track alphabetical sorting
+
+Working.
+
+### Zero-track industries
+
+Working.
+
+### Add Track
+
+Working.
+
+### Edit Track
+
+Working.
+
+### Delete Track
+
+**Working.**
+
+### Add Spot
+
+Working.
+
+### Edit Spot
+
+Working.
+
+### Delete Spot
+
+Working.
+
+### Occupied spot protection
+
+Working.
+
+### Track occupancy detection
+
+Working.
+
+### Track deletion with zero spots
+
+Working.
+
+### Track deletion with empty spots
+
+Working.
+
+### Track deletion with cars
+
+Blocked as intended.
+
+### Normal success popups
+
+Not used for routine add/delete operations.
+
+### Current major unfinished feature
+
+**Assigning cars to spots.**
+
+---
+
+# 44. Important Rule for Future Changes
+
+Do not make broad changes just because a UI behavior appears wrong.
+
+First determine:
+
+```text
+Database
+    ↓
+Service
+    ↓
+Model
+    ↓
+Selection
+    ↓
+Button state
+    ↓
+UI action
+    ↓
+Refresh
+```
+
+Then change only the layer that is actually broken.
+
+This approach recently resolved the Delete Track problem and should be used for future development.
+
+---
+
+# 45. Handoff Instructions for a New Chat
+
+If this document is pasted into a new ChatGPT conversation, the assistant should understand that:
+
+* This is an existing Python/PySide6 application.
+* Do not redesign the application from scratch.
+* Preserve the existing architecture.
+* Preserve working Industry/Track/Spot functionality.
+* Do not remove working features while adding new ones.
+* Provide complete replacement files when modifying code.
+* Do not provide partial snippets when a file is being changed.
+* Do not use `python` after opening code fences.
+* Test changes incrementally.
+* Avoid unnecessary debug output once a feature is verified.
+* The next major development task is car-to-spot assignment.
+* Before implementing that UI, inspect the current Car model and CarService.
+* The desired physical location hierarchy is:
+
+**Industry → Track → Spot → Car**
+
+* Routine successful operations should normally be reflected directly in the UI rather than through unnecessary success message boxes.
+
+---
+
+# 46. Current Development Status — One-Sentence Summary
+
+**ModelRailroadOps has a functioning Industry → Industry Track → Spot management system, including creation, editing, deletion, sorting, capacity tracking, and occupancy protection; the next major development step is establishing the Car-to-Spot relationship and implementing basic car assignment.**

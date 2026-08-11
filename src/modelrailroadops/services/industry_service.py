@@ -1,3 +1,4 @@
+#```python
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
@@ -8,13 +9,10 @@ from modelrailroadops.models.industry_track import IndustryTrack
 from modelrailroadops.models.spot import Spot
 
 
-
 class IndustryService:
     """
     Handles industry database operations.
     """
-
-
 
     @staticmethod
     def get_all():
@@ -43,18 +41,15 @@ class IndustryService:
                 .all()
             )
 
-
             #
-            # Calculate capacity while session
-            # is still active.
+            # Calculate capacity while the
+            # session is still active.
             #
 
             for industry in industries:
 
                 total_spots = 0
-
                 occupied_spots = 0
-
 
                 for track in industry.tracks:
 
@@ -62,37 +57,33 @@ class IndustryService:
 
                         total_spots += 1
 
-
                         if spot.car is not None:
-
                             occupied_spots += 1
-
-
 
                 industry.capacity_total = total_spots
 
-                industry.capacity_occupied = occupied_spots
-
-                industry.capacity_available = (
-                    total_spots - occupied_spots
+                industry.capacity_occupied = (
+                    occupied_spots
                 )
 
+                industry.capacity_available = (
+                    total_spots
+                    - occupied_spots
+                )
 
                 if total_spots:
 
                     industry.capacity_percent = round(
-                        occupied_spots / total_spots * 100
+                        occupied_spots
+                        / total_spots
+                        * 100
                     )
 
                 else:
 
                     industry.capacity_percent = 0
 
-
-
             return industries
-
-
 
     @staticmethod
     def add(
@@ -101,8 +92,28 @@ class IndustryService:
         location,
         notes=None,
     ):
+        """
+        Add a new industry.
+
+        Returns the existing industry if the name
+        already exists.
+        """
+
+        name = name.strip()
+
+        railroad = railroad.strip()
+
+        location = location.strip()
+
+        if not name:
+
+            return None
 
         with SessionLocal() as session:
+
+            #
+            # Check for an existing industry.
+            #
 
             existing = (
                 session.execute(
@@ -115,12 +126,13 @@ class IndustryService:
                 .first()
             )
 
-
             if existing:
 
                 return existing
 
-
+            #
+            # Create new industry.
+            #
 
             industry = Industry(
                 name=name,
@@ -129,21 +141,33 @@ class IndustryService:
                 notes=notes,
             )
 
-
             session.add(
                 industry
             )
 
+            #
+            # Flush so SQLAlchemy assigns
+            # the database-generated ID.
+            #
+
+            session.flush()
+
+            #
+            # Commit.
+            #
+
             session.commit()
+
+            #
+            # Refresh the object so its database
+            # state is current.
+            #
 
             session.refresh(
                 industry
             )
 
-
             return industry
-
-
 
     @staticmethod
     def update(
@@ -154,6 +178,16 @@ class IndustryService:
         notes=None,
     ):
 
+        name = name.strip()
+
+        railroad = railroad.strip()
+
+        location = location.strip()
+
+        if not name:
+
+            return None
+
         with SessionLocal() as session:
 
             industry = session.get(
@@ -161,12 +195,30 @@ class IndustryService:
                 industry_id
             )
 
-
             if industry is None:
 
                 return None
 
+            #
+            # Check whether another industry already
+            # uses the requested name.
+            #
 
+            duplicate = (
+                session.execute(
+                    select(Industry)
+                    .where(
+                        Industry.name == name,
+                        Industry.id != industry_id,
+                    )
+                )
+                .scalars()
+                .first()
+            )
+
+            if duplicate:
+
+                return None
 
             industry.name = name
 
@@ -176,18 +228,13 @@ class IndustryService:
 
             industry.notes = notes
 
-
-
             session.commit()
 
             session.refresh(
                 industry
             )
 
-
             return industry
-
-
 
     @staticmethod
     def delete(
@@ -201,18 +248,14 @@ class IndustryService:
                 industry_id
             )
 
-
             if industry is None:
 
                 return False
-
-
 
             session.delete(
                 industry
             )
 
             session.commit()
-
 
             return True
