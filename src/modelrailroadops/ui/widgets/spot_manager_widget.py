@@ -11,7 +11,10 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
 )
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import (
+    Qt,
+    QSortFilterProxyModel,
+)
 
 from modelrailroadops.services.car_location_service import (
     CarLocationService,
@@ -34,7 +37,6 @@ from modelrailroadops.ui.styles import (
 )
 
 
-
 class SpotManagerWidget(QWidget):
     """
     Manage spot occupancy, restrictions,
@@ -48,16 +50,13 @@ class SpotManagerWidget(QWidget):
 
         super().__init__(parent)
 
-
         layout = QVBoxLayout(self)
-
 
         layout.addWidget(
             QLabel(
                 "Spot Occupancy - Configure Restrictions and Assign Cars"
             )
         )
-
 
         #
         # Filter
@@ -71,6 +70,34 @@ class SpotManagerWidget(QWidget):
             self.violation_filter
         )
 
+        #
+        # Source model
+        #
+
+        self.model = SpotManagerTableModel()
+
+        #
+        # Sorting proxy
+        #
+        # The proxy provides the actual sorting behavior
+        # for the table headers.
+        #
+
+        self.proxy = QSortFilterProxyModel(
+            self
+        )
+
+        self.proxy.setSourceModel(
+            self.model
+        )
+
+        self.proxy.setSortCaseSensitivity(
+            Qt.CaseInsensitive
+        )
+
+        self.proxy.setSortRole(
+            Qt.DisplayRole
+        )
 
         #
         # Table
@@ -78,66 +105,61 @@ class SpotManagerWidget(QWidget):
 
         self.table = QTableView()
 
-
         self.table.setStyleSheet(
             TABLE_SELECTION_STYLE
         )
 
-
-        self.model = SpotManagerTableModel()
-
-
         self.table.setModel(
-            self.model
+            self.proxy
         )
 
+        #
+        # IMPORTANT:
+        #
+        # Enable header sorting.
+        #
+
+        self.table.setSortingEnabled(
+            True
+        )
 
         self.table.setSelectionBehavior(
             QAbstractItemView.SelectRows
         )
 
-
         self.table.setSelectionMode(
             QAbstractItemView.SingleSelection
         )
-
 
         self.table.setAlternatingRowColors(
             True
         )
 
-
         self.table.setEditTriggers(
             QAbstractItemView.NoEditTriggers
         )
-
 
         self.table.horizontalHeader().setSectionResizeMode(
             QHeaderView.ResizeToContents
         )
 
-
         self.table.horizontalHeader().setStretchLastSection(
             True
         )
-
 
         self.table.verticalHeader().setVisible(
             False
         )
 
-
         layout.addWidget(
             self.table
         )
-
 
         #
         # Buttons
         #
 
         button_layout = QHBoxLayout()
-
 
         self.assign_button = QPushButton(
             "Assign Car"
@@ -158,7 +180,6 @@ class SpotManagerWidget(QWidget):
         self.refresh_button = QPushButton(
             "Refresh"
         )
-
 
         button_layout.addWidget(
             self.assign_button
@@ -182,11 +203,9 @@ class SpotManagerWidget(QWidget):
             self.refresh_button
         )
 
-
         layout.addLayout(
             button_layout
         )
-
 
         #
         # Signals
@@ -220,59 +239,102 @@ class SpotManagerWidget(QWidget):
             self.selection_changed
         )
 
-
         self.selection_changed()
 
-
+    #
+    # Filter changed
+    #
 
     def filter_changed(
         self,
-        state
+        state,
     ):
 
         self.model.set_violation_filter(
             state == Qt.Checked.value
         )
 
+        #
+        # Reapply the current sort after
+        # rebuilding the source model.
+        #
+
+        self.proxy.invalidate()
+
         self.selection_changed()
 
-
+    #
+    # Get selected source row
+    #
 
     def get_selected_row(self):
 
-        index = self.table.currentIndex()
+        proxy_index = self.table.currentIndex()
 
-
-        if not index.isValid():
+        if not proxy_index.isValid():
 
             return None
 
+        #
+        # Convert the sorted proxy index back
+        # to the underlying SpotManagerTableModel.
+        #
+
+        source_index = self.proxy.mapToSource(
+            proxy_index
+        )
+
+        if not source_index.isValid():
+
+            return None
+
+        row_number = source_index.row()
+
+        if (
+            row_number < 0
+            or row_number >= len(self.model.rows)
+        ):
+
+            return None
 
         return self.model.rows[
-            index.row()
+            row_number
         ]
 
+    #
+    # Selection changed
+    #
 
-
-    def selection_changed(self, *args):
+    def selection_changed(
+        self,
+        *args,
+    ):
 
         row = self.get_selected_row()
 
-
         if row is None:
 
-            self.assign_button.setEnabled(False)
-            self.move_button.setEnabled(False)
-            self.remove_button.setEnabled(False)
-            self.edit_button.setEnabled(False)
+            self.assign_button.setEnabled(
+                False
+            )
+
+            self.move_button.setEnabled(
+                False
+            )
+
+            self.remove_button.setEnabled(
+                False
+            )
+
+            self.edit_button.setEnabled(
+                False
+            )
 
             return
-
 
         occupied = (
             row["car_id"] is not None
         )
-
 
         self.assign_button.setEnabled(
             not occupied
@@ -290,7 +352,9 @@ class SpotManagerWidget(QWidget):
             True
         )
 
-
+    #
+    # Assign car
+    #
 
     def assign_car(self):
 
@@ -299,18 +363,18 @@ class SpotManagerWidget(QWidget):
         if row is None:
             return
 
-
         dialog = AssignCarDialog(
             spot_id=row["spot_id"],
             parent=self,
         )
 
-
         if dialog.exec():
 
             self.refresh()
 
-
+    #
+    # Move car
+    #
 
     def move_car(self):
 
@@ -319,38 +383,31 @@ class SpotManagerWidget(QWidget):
         if row is None:
             return
 
-
         car_id = row["car_id"]
-
 
         if car_id is None:
             return
 
-
         dialog = AssignCarDialog(
             car_id=car_id,
-            parent=self
+            parent=self,
         )
-
 
         if dialog.exec():
 
             new_spot_id = getattr(
                 dialog,
                 "selected_spot_id",
-                None
+                None,
             )
-
 
             if new_spot_id is None:
                 return
 
-
             result = CarLocationService.move_car(
                 car_id,
-                new_spot_id
+                new_spot_id,
             )
-
 
             if result:
 
@@ -361,10 +418,12 @@ class SpotManagerWidget(QWidget):
                 QMessageBox.warning(
                     self,
                     "Move Failed",
-                    "Unable to move car."
+                    "Unable to move car.",
                 )
 
-
+    #
+    # Remove car
+    #
 
     def remove_car(self):
 
@@ -373,12 +432,10 @@ class SpotManagerWidget(QWidget):
         if row is None:
             return
 
-
         car_id = row["car_id"]
 
         if car_id is None:
             return
-
 
         answer = QMessageBox.question(
             self,
@@ -388,18 +445,15 @@ class SpotManagerWidget(QWidget):
                 f"{row['industry']} - "
                 f"{row['track']} "
                 f"Spot {row['spot']}?"
-            )
+            ),
         )
-
 
         if answer != QMessageBox.Yes:
             return
 
-
         result = CarLocationService.clear_car_location(
             car_id
         )
-
 
         if result:
 
@@ -410,10 +464,12 @@ class SpotManagerWidget(QWidget):
             QMessageBox.warning(
                 self,
                 "Remove Failed",
-                "Unable to remove car."
+                "Unable to remove car.",
             )
 
-
+    #
+    # Edit spot
+    #
 
     def edit_spot(self):
 
@@ -422,23 +478,22 @@ class SpotManagerWidget(QWidget):
         if row is None:
             return
 
-
         dialog = EditSpotDialog(
             row["spot_id"],
             self,
         )
 
-
         if dialog.exec():
 
             self.refresh()
 
-
+    #
+    # Refresh
+    #
 
     def refresh(self):
 
         self.model.load_data()
-
 
         if self.violation_filter.isChecked():
 
@@ -446,6 +501,7 @@ class SpotManagerWidget(QWidget):
                 True
             )
 
+        self.proxy.invalidate()
 
         self.table.resizeColumnsToContents()
 

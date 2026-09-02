@@ -15,28 +15,49 @@ class AddSpotDialog(QDialog):
     """
     Dialog used for adding and editing
     track spots.
+
+    The Allowed Car Type list intentionally uses
+    the exact same car-type identifiers as the
+    Car Roster. This is important because spot
+    restrictions are compared directly against
+    Car.car_type.
     """
+
+    #
+    # IMPORTANT:
+    #
+    # These values must remain synchronized with
+    # AddCarDialog.car_types.
+    #
+    # Do not rename these values independently in
+    # the Spot dialog. They are stored as exact
+    # identifiers and compared against Car.car_type.
+    #
 
     CAR_TYPES = [
         "Boxcar",
+        "Boxcar - High Cube",
         "Cattle Car",
-        "Bulkhead Flatcar",
-        "Covered Hopper",
-        "Flat Car",
-        "Tank Car",
-        "Gondola",
-        "Hopper",
-        "Center Beam Flatcar",
+        "Flatcar",
+        "Flatcar - Bulkhead",
+        "Flatcar - Centerbeam",
+        "Flatcar - Trailer",
+        "Flatcar - Center Depressed",
+        "Tank Car (hazardous)",
+        "Tank Car (general service)",
+        "Tank Car (specialty)",
         "Autorack",
+        "Gondola",
+        "Hopper Car (cylindrical)",
         "Hopper Car (covered)",
         "Hopper Car (open)",
         "Hopper Car (grain)",
+        "Hopper Car (wood chips)",
+        "Hopper Car (ore)",
         "Hopper Car (specialty)",
         "Refrigerator Car",
         "Spine Car",
-        "Trailer Flatcar",
-        "Multi-Level Auto Carrier",
-        "Double Stack Well Car",
+        "Well Car",
         "Caboose",
         "Maintenance of Way (MoW) Car",
         "Maintenance of Way (MoW) Flatcar",
@@ -50,10 +71,7 @@ class AddSpotDialog(QDialog):
         "Passenger-Observation",
         "Passenger-Sleeper",
         "Passenger-Baggage",
-        "Wood Chip Hopper",
-        "HiCube",
-        "Depressed Flatcar",
-        "Other",
+        "Passenger-Dining",
     ]
 
     def __init__(
@@ -79,7 +97,7 @@ class AddSpotDialog(QDialog):
 
         self.resize(
             450,
-            450
+            450,
         )
 
         layout = QVBoxLayout(
@@ -140,14 +158,24 @@ class AddSpotDialog(QDialog):
 
         self.allowed_car_type.addItem(
             "Any Car Type",
-            None
+            None,
         )
 
-        for car_type in self.CAR_TYPES:
+        #
+        # Use the exact same identifiers
+        # used by the Car Roster.
+        #
+
+        car_types = sorted(
+            self.CAR_TYPES,
+            key=str.casefold,
+        )
+
+        for car_type in car_types:
 
             self.allowed_car_type.addItem(
                 car_type,
-                car_type
+                car_type,
             )
 
         #
@@ -192,52 +220,52 @@ class AddSpotDialog(QDialog):
 
         form.addRow(
             "Spot Number",
-            self.spot_number
+            self.spot_number,
         )
 
         form.addRow(
             "Name",
-            self.name
+            self.name,
         )
 
         form.addRow(
             "Description",
-            self.description
+            self.description,
         )
 
         form.addRow(
             "Maximum Length (ft)",
-            self.max_length
+            self.max_length,
         )
 
         form.addRow(
             "Allowed Car Type",
-            self.allowed_car_type
+            self.allowed_car_type,
         )
 
         form.addRow(
             "Allowed Owner",
-            self.allowed_owner
+            self.allowed_owner,
         )
 
         form.addRow(
             "",
-            self.hazardous_allowed
+            self.hazardous_allowed,
         )
 
         form.addRow(
             "",
-            self.load_only
+            self.load_only,
         )
 
         form.addRow(
             "",
-            self.empty_only
+            self.empty_only,
         )
 
         form.addRow(
             "Notes",
-            self.notes
+            self.notes,
         )
 
         layout.addLayout(
@@ -292,6 +320,10 @@ class AddSpotDialog(QDialog):
 
             self.load_spot()
 
+    #
+    # Load existing spot
+    #
+
     def load_spot(self):
         """
         Populate fields from an existing spot.
@@ -321,6 +353,10 @@ class AddSpotDialog(QDialog):
                 0
             )
 
+        #
+        # Restore the exact stored car type.
+        #
+
         if self.spot.allowed_car_type:
 
             index = (
@@ -334,6 +370,12 @@ class AddSpotDialog(QDialog):
                 self.allowed_car_type.setCurrentIndex(
                     index
                 )
+
+        else:
+
+            self.allowed_car_type.setCurrentIndex(
+                0
+            )
 
         self.allowed_owner.setText(
             self.spot.allowed_owner or ""
@@ -367,6 +409,10 @@ class AddSpotDialog(QDialog):
         self.ok_button.setText(
             "Save"
         )
+
+    #
+    # Get data
+    #
 
     def get_data(self):
         """

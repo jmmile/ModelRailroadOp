@@ -1,11 +1,33 @@
 .venv/
+.venv-*/
 __pycache__/
 *.pyc
 *.pyo
+.pytest_cache/
 
 *.egg-info/
 logs/
 data/*.db
+data/*.db.*
+data/car_Images/
+data/test_car_render.png
 
 .vscode/settings.json
+
+# Local documentation, reports, and working artifacts
+docs/
+Project reports/
+jmri-car-roster/
+/*.pdf
+/*.docx
+
+# Superseded root-level diagnostic scripts; maintained tests live in tests/
+/Test_*.py
+/test_*.py
+/check_*.py
+/inspect_*.py
+/remove_*.py
+/migrate_*.py
+/update_*.py
+/add_operations_session_to_waybills.py
 

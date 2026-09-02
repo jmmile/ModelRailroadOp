@@ -1,4 +1,3 @@
-
 from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -159,9 +158,7 @@ class AddIndustryDialog(QDialog):
             self.save_button
         )
 
-        layout.addLayout(
-            button_layout
-        )
+        layout.addLayout(button_layout)
 
         #
         # Signals
@@ -181,6 +178,15 @@ class AddIndustryDialog(QDialog):
 
         self.save_button.clicked.connect(
             self.save
+        )
+
+        #
+        # Update the Edit/Delete buttons whenever
+        # the selected track changes.
+        #
+
+        self.track_table.itemSelectionChanged.connect(
+            self.update_button_state
         )
 
         #
@@ -328,6 +334,7 @@ class AddIndustryDialog(QDialog):
         self.track_table.setRowCount(0)
 
         if self.industry is None:
+            self.update_button_state()
             return
 
         tracks = IndustryTrackService.get_by_industry(
@@ -338,7 +345,9 @@ class AddIndustryDialog(QDialog):
 
             row = self.track_table.rowCount()
 
-            self.track_table.insertRow(row)
+            self.track_table.insertRow(
+                row
+            )
 
             self.track_table.setItem(
                 row,
@@ -356,6 +365,13 @@ class AddIndustryDialog(QDialog):
                 ),
             )
 
+        #
+        # No track should remain selected after
+        # rebuilding the table.
+        #
+
+        self.track_table.clearSelection()
+
         self.update_button_state()
 
     #
@@ -364,16 +380,37 @@ class AddIndustryDialog(QDialog):
 
     def update_button_state(self):
         """
-        Enable or disable track buttons based on
-        whether an industry and track are available.
+        Enable or disable track buttons.
+
+        Add Track is available for both new and existing
+        industries. If the industry is new, clicking Add
+        Track will call ensure_saved() first.
+
+        Edit and Delete require an existing industry and
+        a selected track.
         """
 
-        industry_available = (
-            self.industry is not None
-        )
+        #
+        # Add Track
+        #
+        # This must remain enabled for a new industry.
+        #
+        # add_track() calls ensure_saved(), which creates
+        # the industry before the track is added.
+        #
 
         self.add_track_button.setEnabled(
             True
+        )
+
+        #
+        # A track can only be edited or deleted when
+        # the industry has already been saved and a
+        # track is selected.
+        #
+
+        industry_available = (
+            self.industry is not None
         )
 
         track_selected = (
@@ -381,9 +418,17 @@ class AddIndustryDialog(QDialog):
             and self.track_table.currentRow() >= 0
         )
 
+        #
+        # Edit Track
+        #
+
         self.edit_track_button.setEnabled(
             track_selected
         )
+
+        #
+        # Delete Track
+        #
 
         self.delete_track_button.setEnabled(
             track_selected

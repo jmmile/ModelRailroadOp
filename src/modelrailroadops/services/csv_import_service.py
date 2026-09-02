@@ -34,11 +34,22 @@ class CSVImportService:
             "Car Length",
             "Size",
         ],
+        "empty_weight_lbs": [
+            "Empty Weight (lb)",
+            "Empty Weight",
+            "LT WT",
+        ],
+        "load_limit_lbs": [
+            "Load Limit (lb)",
+            "Load Limit",
+            "LD LMT",
+        ],
         "status": [
             "Status",
         ],
         "location": [
             "Location",
+            "Current Location",
         ],
     }
 
@@ -156,6 +167,16 @@ class CSVImportService:
                             "length",
                         )
 
+                        empty_weight_text = cls._value(
+                            row,
+                            "empty_weight_lbs",
+                        )
+
+                        load_limit_text = cls._value(
+                            row,
+                            "load_limit_lbs",
+                        )
+
 
                         if not reporting_mark:
 
@@ -243,6 +264,48 @@ class CSVImportService:
 
                                 continue
 
+                        empty_weight_lbs = None
+
+                        if empty_weight_text:
+
+                            try:
+
+                                empty_weight_lbs = int(
+                                    empty_weight_text.replace(",", "")
+                                )
+
+                            except ValueError:
+
+                                skipped += 1
+
+                                errors.append(
+                                    f"Line {line_number}: Invalid Weight "
+                                    f"'{empty_weight_text}'"
+                                )
+
+                                continue
+
+                        load_limit_lbs = None
+
+                        if load_limit_text:
+
+                            try:
+
+                                load_limit_lbs = int(
+                                    load_limit_text.replace(",", "")
+                                )
+
+                            except ValueError:
+
+                                skipped += 1
+
+                                errors.append(
+                                    f"Line {line_number}: Invalid Load Limit "
+                                    f"'{load_limit_text}'"
+                                )
+
+                                continue
+
 
 
                         car = Car(
@@ -251,6 +314,8 @@ class CSVImportService:
                             owner=owner,
                             car_type=car_type,
                             length=length,
+                            empty_weight_lbs=empty_weight_lbs,
+                            load_limit_lbs=load_limit_lbs,
                             status=status or "Empty",
                             location=location or "Unassigned",
                         )

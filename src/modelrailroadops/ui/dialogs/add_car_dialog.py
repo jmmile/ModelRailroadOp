@@ -40,7 +40,7 @@ class AddCarDialog(QDialog):
 
         self.resize(
             450,
-            400
+            480
         )
 
         layout = QVBoxLayout(self)
@@ -72,6 +72,7 @@ class AddCarDialog(QDialog):
             "Flatcar - Trailer",
             "Flatcar - Center Depressed",
             "Tank Car (hazardous)",
+            "Tank Car (propane)",
             "Tank Car (general service)",
             "Tank Car (specialty)",    
             "Autorack",
@@ -114,6 +115,18 @@ class AddCarDialog(QDialog):
 
         self.length.setPlaceholderText(
             "Length in feet"
+        )
+
+        self.empty_weight_lbs = QLineEdit()
+
+        self.empty_weight_lbs.setPlaceholderText(
+            "LT WT marking in pounds"
+        )
+
+        self.load_limit_lbs = QLineEdit()
+
+        self.load_limit_lbs.setPlaceholderText(
+            "LD LMT marking in pounds"
         )
 
         self.status = QComboBox()
@@ -181,12 +194,22 @@ class AddCarDialog(QDialog):
         )
 
         form.addRow(
+            "Empty Weight (lb)",
+            self.empty_weight_lbs
+        )
+
+        form.addRow(
+            "Load Limit (lb)",
+            self.load_limit_lbs
+        )
+
+        form.addRow(
             "Status",
             self.status
         )
 
         form.addRow(
-            "Industry",
+            "Current Location",
             self.industry
         )
 
@@ -284,6 +307,18 @@ class AddCarDialog(QDialog):
 
                 self.length.setText(
                     str(self.car.length)
+                )
+
+            if self.car.empty_weight_lbs is not None:
+
+                self.empty_weight_lbs.setText(
+                    str(self.car.empty_weight_lbs)
+                )
+
+            if self.car.load_limit_lbs is not None:
+
+                self.load_limit_lbs.setText(
+                    str(self.car.load_limit_lbs)
                 )
 
             self.status.setCurrentText(
@@ -579,6 +614,49 @@ class AddCarDialog(QDialog):
     # Save
     #
 
+    def parse_weight_field(
+        self,
+        field,
+        field_name,
+    ):
+
+        value_text = (
+            field.text()
+            .strip()
+            .replace(",", "")
+        )
+
+        if not value_text:
+            return True, None
+
+        try:
+
+            value = int(
+                value_text
+            )
+
+        except ValueError:
+
+            QMessageBox.warning(
+                self,
+                "Invalid Weight",
+                f"{field_name} must be a whole number of pounds."
+            )
+
+            return False, None
+
+        if value <= 0:
+
+            QMessageBox.warning(
+                self,
+                "Invalid Weight",
+                f"{field_name} must be greater than zero."
+            )
+
+            return False, None
+
+        return True, value
+
     def save(self):
 
         reporting_mark = (
@@ -641,6 +719,22 @@ class AddCarDialog(QDialog):
                 )
 
                 return
+
+        valid, empty_weight_lbs = self.parse_weight_field(
+            self.empty_weight_lbs,
+            "Empty weight",
+        )
+
+        if not valid:
+            return
+
+        valid, load_limit_lbs = self.parse_weight_field(
+            self.load_limit_lbs,
+            "Load limit",
+        )
+
+        if not valid:
+            return
 
         status = (
             self.status.currentText()
@@ -706,6 +800,10 @@ class AddCarDialog(QDialog):
 
                 length=length,
 
+                empty_weight_lbs=empty_weight_lbs,
+
+                load_limit_lbs=load_limit_lbs,
+
                 status=status,
 
                 location=self.car.location,
@@ -764,6 +862,10 @@ class AddCarDialog(QDialog):
                 ),
 
                 length=length,
+
+                empty_weight_lbs=empty_weight_lbs,
+
+                load_limit_lbs=load_limit_lbs,
 
                 status=status,
 

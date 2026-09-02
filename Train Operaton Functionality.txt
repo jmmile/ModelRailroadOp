@@ -1,0 +1,641 @@
+Here is the complete train.py file:
+
+from sqlalchemy import (
+    # Railroad train symbol
+    #
+
+
+    symbol: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
+
+
+    #
+    # Description
+    #
+
+
+    description: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
+
+    #
+    # Origin
+    #
+
+
+    origin: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+
+    #
+    # Destination
+    #
+
+
+    destination: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+
+    #
+    # Direction
+    #
+
+
+    direction: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+
+
+    #
+    # Active
+    #
+
+
+    active: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+    )
+
+
+    #
+    # Train route stops.
+    #
+    # Routes are maintained separately from the
+    # basic Train record and are ordered by the
+    # TrainRoute.sequence field.
+    #
+
+
+    routes: Mapped[list["TrainRoute"]] = relationship(
+        "TrainRoute",
+        back_populates="train",
+        cascade="all, delete-orphan",
+        order_by="TrainRoute.sequence",
+    )
+
+
+    #
+    # Operations Sessions using this train.
+    #
+
+
+    operations_sessions: Mapped[
+        list["OperationsSessionTrain"]
+    ] = relationship(
+        "OperationsSessionTrain",
+        back_populates="train",
+        cascade="all, delete-orphan",
+    )
+
+
+    def __repr__(
+        self,
+    ):
+
+
+        return (
+            f"<Train("
+            f"id={self.id}, "
+            f"symbol='{self.symbol}', "
+            f"name='{self.name}'"
+            f")>"
+        )
+what's next
+
+Now that operations_session.py and train.py are wired to OperationsSessionTrain, the next step is to verify the association model itself before changing the UI.
+
+Next: operations_session_train.py
+
+It should contain the two foreign keys:
+
+operations_session_id → operations_sessions.id
+train_id → trains.id
+
+and the matching relationships:
+
+operations_session
+train
+
+Once that model is correct, the next step is the service for assigning/removing trains from an Operations Session.
+
+The implementation order is:
+
+✅ OperationsSessionTrain model
+✅ OperationsSession.session_trains
+✅ Train.operations_sessions
+→ Verify/fix operations_session_train.py
+→ OperationsSessionTrainService
+→ Add assigned-trains UI to OperationsSessionsWidget
+→ Connect selected session + selected train
+→ Use the assigned train when generating switch lists/car movements
+
+So the next file I would work on is operations_session_train.py, and we should verify that file before moving on to the service.
+
+from sqlalchemy import (
+    select,
+)
+
+from modelrailroadops.database.database import SessionLocal
+
+from modelrailroadops.models.operations_session_train import (
+    OperationsSessionTrain,
+)
+
+
+class OperationsSessionTrainService:
+    """
+    Service for creating, retrieving, and deleting
+    OperationsSessionTrain records.
+
+    An OperationsSessionTrain record assigns a Train
+    to an Operations Session.
+    """
+
+    #
+    # Get all train assignments
+    #
+
+    @staticmethod
+    def get_all():
+
+        with SessionLocal() as session:
+
+            statement = (
+                select(
+                    OperationsSessionTrain
+                )
+                .order_by(
+                    OperationsSessionTrain.id,
+                )
+            )
+
+            return (
+                session.execute(
+                    statement
+                )
+                .scalars()
+                .all()
+            )
+
+    #
+    # Get assignment by ID
+    #
+
+    @staticmethod
+    def get_by_id(
+        assignment_id,
+    ):
+
+        if assignment_id is None:
+
+            return None
+
+        with SessionLocal() as session:
+
+            return session.get(
+                OperationsSessionTrain,
+                assignment_id,
+            )
+
+    #
+    # Get all trains assigned to an
+    # Operations Session.
+    #
+
+    @staticmethod
+    def get_by_operations_session(
+        operations_session_id,
+    ):
+
+        if operations_session_id is None:
+
+            return []
+
+        with SessionLocal() as session:
+
+            statement = (
+                select(
+                    OperationsSessionTrain
+                )
+                .where(
+                    OperationsSessionTrain.operations_session_id
+                    == operations_session_id
+                )
+                .order_by(
+                    OperationsSessionTrain.id,
+                )
+            )
+
+            return (
+                session.execute(
+                    statement
+                )
+                .scalars()
+                .all()
+            )
+
+    #
+    # Get all Operations Sessions assigned
+    # to a Train.
+    #
+
+    @staticmethod
+    def get_by_train(
+        train_id,
+    ):
+
+        if train_id is None:
+
+            return []
+
+        with SessionLocal() as session:
+
+            statement = (
+                select(
+                    OperationsSessionTrain
+                )
+                .where(
+                    OperationsSessionTrain.train_id
+                    == train_id
+                )
+                .order_by(
+                    OperationsSessionTrain.id,
+                )
+            )
+
+            return (
+                session.execute(
+                    statement
+                )
+                .scalars()
+                .all()
+            )
+
+    #
+    # Check whether a Train is already
+    # assigned to an Operations Session.
+    #
+
+    @staticmethod
+    def exists(
+        operations_session_id,
+        train_id,
+    ):
+
+        if (
+            operations_session_id is None
+            or train_id is None
+        ):
+
+            return False
+
+        with SessionLocal() as session:
+
+            statement = (
+                select(
+                    OperationsSessionTrain
+                )
+                .where(
+                    OperationsSessionTrain.operations_session_id
+                    == operations_session_id,
+                    OperationsSessionTrain.train_id
+                    == train_id,
+                )
+            )
+
+            return (
+                session.execute(
+                    statement
+                )
+                .scalars()
+                .first()
+                is not None
+            )
+
+    #
+    # Assign a Train to an Operations Session.
+    #
+
+    @staticmethod
+    def create(
+        operations_session_id,
+        train_id,
+    ):
+
+        if operations_session_id is None:
+
+            return (
+                False,
+                "No Operations Session was specified.",
+            )
+
+        if train_id is None:
+
+            return (
+                False,
+                "No train was specified.",
+            )
+
+        with SessionLocal() as session:
+
+            #
+            # Prevent duplicate assignments.
+            #
+
+            existing = (
+                session.execute(
+                    select(
+                        OperationsSessionTrain
+                    )
+                    .where(
+                        OperationsSessionTrain.operations_session_id
+                        == operations_session_id,
+                        OperationsSessionTrain.train_id
+                        == train_id,
+                    )
+                )
+                .scalars()
+                .first()
+            )
+
+            if existing is not None:
+
+                return (
+                    False,
+                    (
+                        "This train is already "
+                        "assigned to the Operations Session."
+                    ),
+                )
+
+            assignment = OperationsSessionTrain(
+                operations_session_id=(
+                    operations_session_id
+                ),
+                train_id=train_id,
+            )
+
+            session.add(
+                assignment
+            )
+
+            session.commit()
+
+            session.refresh(
+                assignment
+            )
+
+            return (
+                True,
+                assignment,
+            )
+
+    #
+    # Delete a train assignment.
+    #
+
+    @staticmethod
+    def delete(
+        assignment_id,
+    ):
+
+        if assignment_id is None:
+
+            return (
+                False,
+                "No train assignment was specified.",
+            )
+
+        with SessionLocal() as session:
+
+            assignment = session.get(
+                OperationsSessionTrain,
+                assignment_id,
+            )
+
+            if assignment is None:
+
+                return (
+                    False,
+                    (
+                        f"Operations Session train "
+                        f"assignment {assignment_id} "
+                        "was not found."
+                    ),
+                )
+
+            session.delete(
+                assignment
+            )
+
+            session.commit()
+
+            return (
+                True,
+                "Train assignment deleted successfully.",
+            )
+
+    #
+    # Remove a specific Train from an
+    # Operations Session.
+    #
+
+    @staticmethod
+    def delete_by_operations_session_and_train(
+        operations_session_id,
+        train_id,
+    ):
+
+        if operations_session_id is None:
+
+            return (
+                False,
+                "No Operations Session was specified.",
+            )
+
+        if train_id is None:
+
+            return (
+                False,
+                "No train was specified.",
+            )
+
+        with SessionLocal() as session:
+
+            statement = (
+                select(
+                    OperationsSessionTrain
+                )
+                .where(
+                    OperationsSessionTrain.operations_session_id
+                    == operations_session_id,
+                    OperationsSessionTrain.train_id
+                    == train_id,
+                )
+            )
+
+            assignment = (
+                session.execute(
+                    statement
+                )
+                .scalars()
+                .first()
+            )
+
+            if assignment is None:
+
+                return (
+                    False,
+                    "Train is not assigned to this Operations Session.",
+                )
+
+            session.delete(
+                assignment
+            )
+
+            session.commit()
+
+            return (
+                True,
+                "Train removed from Operations Session.",
+            )
+
+    #
+    # Delete all train assignments for
+    # an Operations Session.
+    #
+
+    @staticmethod
+    def delete_by_operations_session(
+        operations_session_id,
+    ):
+
+        if operations_session_id is None:
+
+            return (
+                False,
+                "No Operations Session was specified.",
+            )
+
+        with SessionLocal() as session:
+
+            statement = (
+                select(
+                    OperationsSessionTrain
+                )
+                .where(
+                    OperationsSessionTrain.operations_session_id
+                    == operations_session_id
+                )
+            )
+
+            assignments = (
+                session.execute(
+                    statement
+                )
+                .scalars()
+                .all()
+            )
+
+            for assignment in assignments:
+
+                session.delete(
+                    assignment
+                )
+
+            session.commit()
+
+            return (
+                True,
+                (
+                    f"Deleted {len(assignments)} "
+                    "train assignment(s)."
+                ),
+            )
+
+    #
+    # Delete all Operations Session assignments
+    # for a Train.
+    #
+
+    @staticmethod
+    def delete_by_train(
+        train_id,
+    ):
+
+        if train_id is None:
+
+            return (
+                False,
+                "No train was specified.",
+            )
+
+        with SessionLocal() as session:
+
+            statement = (
+                select(
+                    OperationsSessionTrain
+                )
+                .where(
+                    OperationsSessionTrain.train_id
+                    == train_id
+                )
+            )
+
+            assignments = (
+                session.execute(
+                    statement
+                )
+                .scalars()
+                .all()
+            )
+
+            for assignment in assignments:
+
+                session.delete(
+                    assignment
+                )
+
+            session.commit()
+
+            return (
+                True,
+                (
+                    f"Deleted {len(assignments)} "
+                    "train assignment(s)."
+                ),
+            )
+
+Yes — that gives us the OperationsSessionTrainService, so that part is already built.
+
+What is next
+
+The next step is to modify OperationsSessionsWidget so an Operations Session can show and manage its assigned trains.
+
+The intended layout is:
+
+Operations Sessions
+
+Session	Date	Status
+
+Then, when a session is selected:
+
+Assigned Trains
+
+Symbol	Train Name	Direction	Origin	Destination
+
+With buttons such as:
+
+Assign Train
+Remove Train
+Refresh

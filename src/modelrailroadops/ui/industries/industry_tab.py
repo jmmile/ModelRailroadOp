@@ -1,4 +1,3 @@
-#```python
 from PySide6.QtCore import (
     Qt,
     QSortFilterProxyModel,
@@ -221,10 +220,74 @@ class IndustryTab(QWidget):
         )
 
         #
+        # IMPORTANT:
+        #
+        # The table uses a QSortFilterProxyModel, so the
+        # selection must be monitored on the table's
+        # selection model.
+        #
+
+        self.table.selectionModel().selectionChanged.connect(
+            self.industry_selection_changed
+        )
+
+        #
+        # Initial button state
+        #
+
+        self.update_button_state()
+
+        #
         # Initial database load
         #
 
         self.refresh()
+
+    #
+    # Update button state
+    #
+
+    def update_button_state(
+        self
+    ):
+
+        has_selection = bool(
+            self.table.selectionModel()
+            .selectedRows()
+        )
+
+        #
+        # Add Industry is always available.
+        #
+
+        self.add_button.setEnabled(
+            True
+        )
+
+        #
+        # Edit and Delete require a selected
+        # industry.
+        #
+
+        self.edit_button.setEnabled(
+            has_selection
+        )
+
+        self.delete_button.setEnabled(
+            has_selection
+        )
+
+    #
+    # Industry selection changed
+    #
+
+    def industry_selection_changed(
+        self,
+        selected,
+        deselected,
+    ):
+
+        self.update_button_state()
 
     #
     # Refresh
@@ -242,6 +305,14 @@ class IndustryTab(QWidget):
         self.status_label.setText(
             f"{self.model.rowCount()} industries"
         )
+
+        #
+        # Refreshing the model can change or remove the
+        # current selection, so update the buttons after
+        # the model has been refreshed.
+        #
+
+        self.update_button_state()
 
     #
     # Show Event
@@ -265,7 +336,9 @@ class IndustryTab(QWidget):
     # Add Industry
     #
 
-    def add_industry(self):
+    def add_industry(
+        self
+    ):
 
         dialog = AddIndustryDialog(
             self
@@ -300,6 +373,19 @@ class IndustryTab(QWidget):
             self.table.selectionModel()
             .selectedRows()
         )
+
+        #
+        # When called by double-click, use the supplied
+        # index if there is not currently a selection.
+        #
+
+        if not indexes and index is not None:
+
+            if index.isValid():
+
+                indexes = [
+                    index
+                ]
 
         if not indexes:
 
@@ -355,7 +441,9 @@ class IndustryTab(QWidget):
     # Delete Industry
     #
 
-    def delete_industry(self):
+    def delete_industry(
+        self
+    ):
 
         indexes = (
             self.table.selectionModel()
@@ -429,3 +517,5 @@ class IndustryTab(QWidget):
                     "Delete Industry",
                     "The industry could not be deleted."
                 )
+
+                self.update_button_state()

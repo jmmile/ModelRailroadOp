@@ -1,0 +1,75 @@
+We can add **switch list capabilities now**. In fact, I think we're at the right point to start them.
+
+The important thing is to build them in stages rather than trying to create the entire switch-list system at once.
+
+### Recommended next phase: Switch Lists
+
+I'd build it in this order:
+
+1. **Switch List data/model**
+
+   * Session
+   * Car
+   * Current location
+   * Pickup location
+   * Setout location
+   * Move type/status
+
+2. **Switch List generation**
+
+   * Look at active waybills.
+   * Find cars that need to move.
+   * Determine pickup location from the car's current Industry → Track → Spot.
+   * Determine setout location from the waybill destination.
+
+3. **Switch List screen**
+
+   Something like:
+
+   | Move | Car        | From           | Pick Up          | To             | Set Out          |
+   | ---- | ---------- | -------------- | ---------------- | -------------- | ---------------- |
+   | 1    | UP 12345   | Cascade Lumber | Track 2 / Spot 3 | Pacific Paper  | Track 1 / Spot 2 |
+   | 2    | ATSF 45678 | Acme Feed      | Track 1 / Spot 4 | Cascade Lumber | Track 3 / Spot 1 |
+
+4. **Operator execution**
+
+   * Select a move.
+   * Execute it.
+   * The car's Industry → Track → Spot changes.
+   * Car History records the movement.
+
+5. **Completed moves**
+
+   * Mark moves completed.
+   * Update the waybill.
+   * Remove completed moves from the active switch list.
+
+### Where I'd put it in the application
+
+You already have:
+
+**Waybills**
+**Operations Sessions**
+
+I'd add:
+
+**Switch List**
+
+as another main tab.
+
+Eventually the workflow becomes:
+
+**Car Roster → Waybill → Operations Session → Switch List → Execute Moves → Car History**
+
+### One thing I would do before writing the switch-list code
+
+We should verify the **Waybill model and current Waybills UI** are in the state we want. The switch-list generator will depend heavily on the fields in the Waybill.
+
+So I recommend:
+
+**Next:** finish/verify Waybill editing
+**Then:** build Switch List generation
+**Then:** build the Switch List display
+**Then:** add execution of moves.
+
+We don't need to wait for every other planned feature. **We can start the switch-list phase now.**

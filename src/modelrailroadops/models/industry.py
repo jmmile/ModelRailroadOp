@@ -1,4 +1,4 @@
-from sqlalchemy import String, UniqueConstraint
+from sqlalchemy import ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from modelrailroadops.database.base import Base
@@ -43,6 +43,21 @@ class Industry(Base):
     notes: Mapped[str | None] = mapped_column(
         String(500),
         nullable=True,
+    )
+
+
+    operating_location_id: Mapped[int | None] = mapped_column(
+        ForeignKey(
+            "locations.id",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+    )
+
+
+    operating_location: Mapped["Location | None"] = relationship(
+        "Location",
+        back_populates="industries",
     )
 
 

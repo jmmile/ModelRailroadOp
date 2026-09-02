@@ -5,6 +5,8 @@ from sqlalchemy.orm import selectinload
 from modelrailroadops.database.database import SessionLocal
 
 from modelrailroadops.models.industry_track import IndustryTrack
+from modelrailroadops.models.industry import Industry
+from modelrailroadops.models.location_track import LocationTrack
 from modelrailroadops.models.spot import Spot
 from modelrailroadops.models.car import Car
 
@@ -26,6 +28,15 @@ class IndustryTrackService:
 
         with SessionLocal() as session:
 
+            industry = session.get(
+                Industry,
+                industry_id,
+            )
+
+            if industry is None:
+
+                return None
+
             existing = session.execute(
                 select(IndustryTrack).where(
                     IndustryTrack.industry_id == industry_id,
@@ -36,9 +47,46 @@ class IndustryTrackService:
             if existing:
                 return existing
 
+            operating_track = None
+
+            if industry.operating_location_id is not None:
+
+                operating_track = (
+                    session.execute(
+                        select(LocationTrack).where(
+                            LocationTrack.location_id
+                            == industry.operating_location_id,
+                            LocationTrack.name == name,
+                        )
+                    )
+                    .scalars()
+                    .first()
+                )
+
+                if operating_track is None:
+
+                    operating_track = LocationTrack(
+                        location_id=industry.operating_location_id,
+                        name=name,
+                        track_type="INDUSTRY",
+                        capacity=spots,
+                        active=True,
+                    )
+
+                    session.add(
+                        operating_track
+                    )
+
+                    session.flush()
+
             track = IndustryTrack(
                 industry_id=industry_id,
                 name=name,
+                operating_track_id=(
+                    operating_track.id
+                    if operating_track is not None
+                    else None
+                ),
             )
 
             session.add(track)
@@ -85,6 +133,11 @@ class IndustryTrackService:
                 return None
 
             track.name = name
+
+            if track.operating_track is not None:
+
+                track.operating_track.name = name
+                track.operating_track.capacity = spots
 
             current_count = session.execute(
                 select(Spot)

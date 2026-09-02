@@ -1,0 +1,169 @@
+Excellent. That means the **Switch List foundation is now working**:
+
+* Switch List tab loads.
+* Operations Sessions populate the selector.
+* You can select a session.
+* The Switch List service retrieves the Waybills.
+* The table model displays the resulting moves.
+* Sorting is enabled.
+
+### What should we add next?
+
+The next important function should be **actual switch-list operating actions**, not more database work.
+
+I recommend this order:
+
+1. **Pickup / Set-out indication**
+
+   * Clearly identify where each car is picked up.
+   * Clearly identify where each car is set out.
+   * Make the list useful to an operator while running a train.
+
+2. **Switch List print/preview**
+
+   * Generate a clean printable switch list.
+   * Include Operations Session, car, origin, destination, track, and spot.
+   * Separate **Pickups** and **Set-outs**.
+
+3. **Mark a move In Progress**
+
+   * Operator selects a car/move.
+   * Mark its Waybill `IN_PROGRESS`.
+
+4. **Complete a move**
+
+   * After the car is actually delivered, complete the Waybill.
+   * Eventually this should also update the car's physical Industry → Track → Spot location.
+
+5. **Move the car**
+
+   * This is where the switch list becomes an actual **operations system**, rather than simply a list.
+   * Completing a set-out should place the car into the destination spot.
+   * Completing a pickup should remove it from its origin spot.
+
+### I recommend we do #1 next
+
+We already built `get_pickup_rows()` and `get_setout_rows()` in `SwitchListService`, so the next logical step is to modify the Switch List UI to show:
+
+**PICKUPS**
+
+| Car | Type | From | To |
+| --- | ---- | ---- | -- |
+
+and
+
+**SET-OUTS**
+
+| Car | Type | Destination | Track | Spot |
+| --- | ---- | ----------- | ----- | ---- |
+
+That will give you a genuinely useful switch list before we start adding the operational actions.
+
+**After that, we can tackle printing/preview**, which is when the switch-list capability starts becoming something you can actually take to the layout.
+
+
+
+
+
+
+
+The next step should be **printing / previewing the switch list**.
+
+We now have the operational data separated into **PICKUPS** and **SET-OUTS**, so before adding actions that modify cars and waybills, we should make the switch list usable during an operating session.
+
+### Recommended order from here
+
+1. **Switch List Preview / Print** ← next
+
+   * Print the selected Operations Session.
+   * Separate PICKUPS and SET-OUTS.
+   * Include:
+
+     * Car
+     * Car type
+     * Origin
+     * Destination
+     * Track
+     * Spot
+     * Notes
+   * Include the session name/date at the top.
+
+2. **Mark Move In Progress**
+
+   * Select a switch-list move.
+   * Change its Waybill from `ACTIVE` → `IN_PROGRESS`.
+
+3. **Complete Move**
+
+   * Mark the Waybill `COMPLETED`.
+   * Record `completed_at`.
+
+4. **Update Car Location**
+
+   * When a set-out is completed, move the car into the destination Industry → Track → Spot.
+   * When a pickup is completed, remove it from its origin spot.
+
+5. **Build the full operating workflow**
+
+   * Eventually the operator can work down the switch list and the program keeps the physical car locations synchronized with the railroad.
+
+So I would **not add another database table yet**. The existing Waybill, Operations Session, Car, Industry, Track, and Spot structure is enough.
+
+**Next file:** `switch_list_widget.py` — we'll add a **Print Preview** button and the preview/printing functionality.
+
+
+
+
+
+The next function should be **Switch List Print Preview**.
+
+At this point we have:
+
+1. Waybill database model ✅
+2. Waybill service — create/edit/complete/cancel ✅
+3. Operations Session model/UI ✅
+4. Switch List Service ✅
+5. Switch List table model ✅
+6. Switch List tab/UI ✅
+7. Operations Session selection ✅
+8. Active/In-Progress Waybills displayed ✅
+9. Sortable Switch List table ✅
+
+### Next: Switch List Preview / Printing
+
+I recommend we build it in this order:
+
+**A. Switch List Preview**
+
+* Preview the selected Operations Session.
+* Show a clean railroad-style switch list.
+* Group the work logically:
+
+  * **Pickups**
+  * **Set-outs**
+* Show:
+
+  * Car
+  * Car type
+  * Origin
+  * Destination
+  * Track
+  * Spot
+  * Notes
+
+**B. Print**
+
+* Add a **Print** button.
+* Use Qt's print dialog.
+* Print the same formatted switch list shown in preview.
+
+**C. Later: operational enhancements**
+
+* Mark a move **In Progress**
+* Complete a move
+* Update the car's actual location when a move is completed
+* Eventually track the sequence of moves for a session.
+
+So I would **not add another database table yet**. The existing Waybill + Operations Session + Car/Industry/Track/Spot structure is sufficient to produce the first useful switch list.
+
+**The next file I would create is `switch_list_preview_dialog.py`.** That gives us the actual printable switch-list document before we add printing mechanics.

@@ -325,6 +325,11 @@ class AssignCarDialog(QDialog):
 
         if spot_id is None:
 
+            self.car_combo.addItem(
+                "Select an available destination spot",
+                None,
+            )
+
             self.car_combo.blockSignals(
                 False
             )
@@ -654,6 +659,11 @@ class AssignCarDialog(QDialog):
 
         if industry_id is None:
 
+            self.track_combo.addItem(
+                "No tracks available",
+                None,
+            )
+
             self.track_combo.blockSignals(
                 False
             )
@@ -680,6 +690,13 @@ class AssignCarDialog(QDialog):
                     track.name,
                     track.id
                 )
+
+        if not self.track_combo.count():
+
+            self.track_combo.addItem(
+                "No tracks available",
+                None,
+            )
 
         self.track_combo.blockSignals(
             False
@@ -730,8 +747,17 @@ class AssignCarDialog(QDialog):
 
         if track_id is None:
 
+            self.spot_combo.addItem(
+                "No available spots",
+                None,
+            )
+
             self.spot_combo.blockSignals(
                 False
+            )
+
+            self.load_cars_for_spot(
+                None
             )
 
             return
@@ -789,6 +815,17 @@ class AssignCarDialog(QDialog):
             )
 
             self.spot_changed()
+
+        else:
+
+            self.spot_combo.addItem(
+                "No available spots",
+                None,
+            )
+
+            self.load_cars_for_spot(
+                None
+            )
 
     # ==========================================================
     # LOAD FIXED DESTINATION

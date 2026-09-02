@@ -18,7 +18,6 @@ from modelrailroadops.models.industry_track import IndustryTrack
 from modelrailroadops.services.spot_service import SpotService
 
 
-
 class SpotManagerTableModel(QAbstractTableModel):
 
     HEADERS = [
@@ -37,8 +36,6 @@ class SpotManagerTableModel(QAbstractTableModel):
         "Status",
     ]
 
-
-
     def __init__(self):
 
         super().__init__()
@@ -49,25 +46,25 @@ class SpotManagerTableModel(QAbstractTableModel):
 
         self.load_data()
 
-
-
-    def rowCount(self, parent=None):
+    def rowCount(
+        self,
+        parent=None,
+    ):
 
         return len(self.rows)
 
-
-
-    def columnCount(self, parent=None):
+    def columnCount(
+        self,
+        parent=None,
+    ):
 
         return len(self.HEADERS)
-
-
 
     def headerData(
         self,
         section,
         orientation,
-        role=Qt.DisplayRole
+        role=Qt.DisplayRole,
     ):
 
         if (
@@ -75,25 +72,25 @@ class SpotManagerTableModel(QAbstractTableModel):
             and orientation == Qt.Horizontal
         ):
 
-            return self.HEADERS[section]
+            return self.HEADERS[
+                section
+            ]
 
         return None
-
-
 
     def data(
         self,
         index,
-        role=Qt.DisplayRole
+        role=Qt.DisplayRole,
     ):
 
         if not index.isValid():
 
             return None
 
-
-        row = self.rows[index.row()]
-
+        row = self.rows[
+            index.row()
+        ]
 
         if role == Qt.DisplayRole:
 
@@ -115,9 +112,9 @@ class SpotManagerTableModel(QAbstractTableModel):
 
             ]
 
-            return values[index.column()]
-
-
+            return values[
+                index.column()
+            ]
 
         #
         # Highlight violations
@@ -131,11 +128,9 @@ class SpotManagerTableModel(QAbstractTableModel):
                     QColor(
                         255,
                         200,
-                        200
+                        200,
                     )
                 )
-
-
 
         if role == Qt.ForegroundRole:
 
@@ -148,26 +143,28 @@ class SpotManagerTableModel(QAbstractTableModel):
                     QColor(
                         180,
                         0,
-                        0
+                        0,
                     )
                 )
 
-
-
         return None
 
-
+    #
+    # Violation filter
+    #
 
     def set_violation_filter(
         self,
-        enabled
+        enabled,
     ):
 
         self.show_violations_only = enabled
 
         self.load_data()
 
-
+    #
+    # Load data
+    #
 
     def load_data(self):
 
@@ -175,54 +172,36 @@ class SpotManagerTableModel(QAbstractTableModel):
 
         self.rows = []
 
-
         with SessionLocal() as session:
-
 
             spots = (
                 session.query(Spot)
-
                 .options(
-
                     joinedload(
                         Spot.track
-                    )
-                    .joinedload(
+                    ).joinedload(
                         IndustryTrack.industry
                     ),
-
                     joinedload(
                         Spot.car
-                    )
-
+                    ),
                 )
-
                 .all()
             )
 
-
-
             for spot in spots:
-
 
                 track = spot.track
 
                 if track is None:
-
                     continue
-
 
                 industry = track.industry
 
                 if industry is None:
-
                     continue
 
-
-
                 car = spot.car
-
-
 
                 if car:
 
@@ -231,7 +210,9 @@ class SpotManagerTableModel(QAbstractTableModel):
                         f"{car.number}"
                     )
 
-                    car_type = car.car_type or ""
+                    car_type = (
+                        car.car_type or ""
+                    )
 
                     car_length = (
                         car.length
@@ -240,7 +221,6 @@ class SpotManagerTableModel(QAbstractTableModel):
                     )
 
                     car_id = car.id
-
 
                 else:
 
@@ -252,15 +232,11 @@ class SpotManagerTableModel(QAbstractTableModel):
 
                     car_id = None
 
-
-
                 valid, message = (
                     SpotService.check_restriction_violation(
                         spot.id
                     )
                 )
-
-
 
                 status = (
                     "🟢 OK"
@@ -269,8 +245,6 @@ class SpotManagerTableModel(QAbstractTableModel):
                     f"⚠ {message}"
                 )
 
-
-
                 if (
                     self.show_violations_only
                     and valid
@@ -278,27 +252,31 @@ class SpotManagerTableModel(QAbstractTableModel):
 
                     continue
 
-
-
                 self.rows.append(
-
                     {
+                        "spot_id":
+                            spot.id,
 
-                        "spot_id": spot.id,
+                        "car_id":
+                            car_id,
 
-                        "car_id": car_id,
+                        "industry":
+                            industry.name,
 
-                        "industry": industry.name,
+                        "track":
+                            track.name,
 
-                        "track": track.name,
+                        "spot":
+                            spot.spot_number,
 
-                        "spot": spot.spot_number,
+                        "car":
+                            car_name,
 
-                        "car": car_name,
+                        "car_type":
+                            car_type,
 
-                        "car_type": car_type,
-
-                        "length": car_length,
+                        "length":
+                            car_length,
 
                         "allowed_car_type":
                             spot.allowed_car_type or "",
@@ -310,30 +288,32 @@ class SpotManagerTableModel(QAbstractTableModel):
                             spot.max_length or "",
 
                         "hazardous_allowed":
-                            "Yes"
-                            if spot.hazardous_allowed
-                            else "No",
+                            (
+                                "Yes"
+                                if spot.hazardous_allowed
+                                else "No"
+                            ),
 
                         "load_only":
-                            "Yes"
-                            if spot.load_only
-                            else "No",
+                            (
+                                "Yes"
+                                if spot.load_only
+                                else "No"
+                            ),
 
                         "empty_only":
-                            "Yes"
-                            if spot.empty_only
-                            else "No",
+                            (
+                                "Yes"
+                                if spot.empty_only
+                                else "No"
+                            ),
 
                         "restriction_status":
                             status,
 
                         "restriction_ok":
                             valid,
-
                     }
-
                 )
-
-
 
         self.endResetModel()

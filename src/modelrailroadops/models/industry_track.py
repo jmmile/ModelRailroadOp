@@ -29,6 +29,15 @@ class IndustryTrack(Base):
     )
 
 
+    operating_track_id: Mapped[int | None] = mapped_column(
+        ForeignKey(
+            "location_tracks.id",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+    )
+
+
     name: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
@@ -39,6 +48,12 @@ class IndustryTrack(Base):
     industry = relationship(
         "Industry",
         back_populates="tracks",
+    )
+
+
+    operating_track = relationship(
+        "LocationTrack",
+        back_populates="industry_tracks",
     )
 
 

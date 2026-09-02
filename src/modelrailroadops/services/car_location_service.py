@@ -1,4 +1,3 @@
-
 from sqlalchemy import select
 
 from modelrailroadops.database.database import SessionLocal
@@ -6,6 +5,9 @@ from modelrailroadops.database.database import SessionLocal
 from modelrailroadops.models.car import Car
 from modelrailroadops.models.industry import Industry
 from modelrailroadops.models.industry_track import IndustryTrack
+from modelrailroadops.models.location import Location
+from modelrailroadops.models.location_track import LocationTrack
+from modelrailroadops.models.operations_session import OperationsSession
 from modelrailroadops.models.spot import Spot
 from modelrailroadops.models.car_movement import CarMovement
 
@@ -26,6 +28,47 @@ class CarLocationService:
     """
 
     # ==========================================================
+    # OPERATIONS SESSION MOVEMENT STATE
+    # ==========================================================
+
+    @staticmethod
+    def _prepare_operations_session_for_movement(
+        session,
+        operations_session_id,
+    ):
+        """Start a PLANNED session when its first car is moved.
+
+        The status change shares the car-movement transaction, so a failed
+        move cannot leave the Operations Session marked ACTIVE.
+        """
+
+        if operations_session_id is None:
+            return True, ""
+
+        operations_session = session.get(
+            OperationsSession,
+            operations_session_id,
+        )
+
+        if operations_session is None:
+            return False, "The Operations Session was not found."
+
+        if operations_session.status == "PLANNED":
+            operations_session.status = "ACTIVE"
+            return True, ""
+
+        if operations_session.status == "ACTIVE":
+            return True, ""
+
+        return (
+            False,
+            (
+                f"Operations Session '{operations_session.name}' is "
+                f"{operations_session.status} and cannot accept car moves."
+            ),
+        )
+
+    # ==========================================================
     # TEXT NORMALIZATION
     # ==========================================================
 
@@ -39,6 +82,7 @@ class CarLocationService:
         """
 
         if value is None:
+
             return ""
 
         return str(value).strip().casefold()
@@ -93,9 +137,6 @@ class CarLocationService:
         #
         # Allowed car type
         #
-        # Compare case-insensitively and ignore
-        # accidental leading/trailing spaces.
-        #
 
         if spot.allowed_car_type:
 
@@ -126,9 +167,6 @@ class CarLocationService:
 
         #
         # Allowed owner
-        #
-        # Compare case-insensitively and ignore
-        # accidental leading/trailing spaces.
         #
 
         if spot.allowed_owner:
@@ -434,9 +472,14 @@ class CarLocationService:
     def assign_car_to_spot_with_message(
         car_id,
         spot_id,
+        operations_session_id=None,
     ):
         """
         Assign or move a car to a spot.
+
+        operations_session_id is optional. When supplied,
+        it is recorded on the resulting CarMovement history
+        record.
 
         Returns:
 
@@ -526,6 +569,16 @@ class CarLocationService:
                     False,
                     "The destination spot is already occupied."
                 )
+
+            session_ready, message = (
+                CarLocationService._prepare_operations_session_for_movement(
+                    session,
+                    operations_session_id,
+                )
+            )
+
+            if not session_ready:
+                return False, message
 
             #
             # Get track.
@@ -675,14 +728,20 @@ class CarLocationService:
             car.industry_id = industry.id
             car.track_id = track.id
             car.spot_id = spot.id
+            car.operating_location_id = industry.operating_location_id
+            car.operating_track_id = track.operating_track_id
             car.location = new_location
 
             #
             # Record movement history.
             #
+            # If this move belongs to an Operations Session,
+            # associate the movement with that session.
+            #
 
             movement = CarMovement(
                 car_id=car.id,
+                operations_session_id=operations_session_id,
                 from_location=old_location,
                 to_location=new_location,
                 movement_type=movement_type,
@@ -708,6 +767,108 @@ class CarLocationService:
             )
 
     # ==========================================================
+    # MOVE CAR TO GENERAL LOCATION TRACK
+    # ==========================================================
+
+    @staticmethod
+    def move_car_to_location_track_with_message(
+        car_id,
+        location_track_id,
+        operations_session_id=None,
+    ):
+        """Move a car to a yard, staging, or interchange track."""
+
+        with SessionLocal() as session:
+
+            car = session.get(Car, car_id)
+            track = session.get(LocationTrack, location_track_id)
+
+            if car is None:
+                return False, "Car not found."
+
+            if track is None:
+                return False, "Destination track not found."
+
+            location = session.get(Location, track.location_id)
+
+            if location is None:
+                return False, "Destination location not found."
+
+            if not location.active or not track.active:
+                return False, "Destination location and track must be active."
+
+            industry_track = (
+                session.execute(
+                    select(IndustryTrack).where(
+                        IndustryTrack.operating_track_id
+                        == location_track_id
+                    )
+                )
+                .scalars()
+                .first()
+            )
+
+            if industry_track is not None:
+                return (
+                    False,
+                    "Industry tracks require an available destination spot.",
+                )
+
+            if track.capacity is not None:
+                occupied = len(
+                    session.execute(
+                        select(Car).where(
+                            Car.operating_track_id == location_track_id,
+                            Car.id != car_id,
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+
+                if occupied >= track.capacity:
+                    return False, "The destination track is at capacity."
+
+            session_ready, message = (
+                CarLocationService._prepare_operations_session_for_movement(
+                    session,
+                    operations_session_id,
+                )
+            )
+
+            if not session_ready:
+                return False, message
+
+            old_location = car.location or "Unassigned"
+            new_location = f"{location.name} - {track.name}"
+            movement_type = (
+                "ASSIGN"
+                if old_location == "Unassigned"
+                else "MOVE"
+            )
+
+            car.industry_id = None
+            car.track_id = None
+            car.spot_id = None
+            car.operating_location_id = location.id
+            car.operating_track_id = track.id
+            car.location = new_location
+
+            session.add(
+                CarMovement(
+                    car_id=car.id,
+                    operations_session_id=operations_session_id,
+                    from_location=old_location,
+                    to_location=new_location,
+                    movement_type=movement_type,
+                )
+            )
+
+            session.commit()
+
+            return True, ""
+
+    # ==========================================================
     # ASSIGN CAR
     # ==========================================================
 
@@ -715,12 +876,16 @@ class CarLocationService:
     def assign_car_to_spot(
         car_id,
         spot_id,
+        operations_session_id=None,
     ):
         """
         Assign or move a car to a spot.
 
         This method is retained for compatibility with
         existing parts of the application.
+
+        operations_session_id is optional and is passed
+        through to the movement-history record.
 
         Returns the Car object on success or False
         on failure.
@@ -730,6 +895,7 @@ class CarLocationService:
             CarLocationService.assign_car_to_spot_with_message(
                 car_id,
                 spot_id,
+                operations_session_id,
             )
         )
 
@@ -752,9 +918,13 @@ class CarLocationService:
     def move_car(
         car_id,
         new_spot_id,
+        operations_session_id=None,
     ):
         """
         Move a car to a new spot.
+
+        operations_session_id is optional. When supplied,
+        it is recorded with the resulting CarMovement.
 
         Returns the Car object on success or False
         on failure.
@@ -764,6 +934,7 @@ class CarLocationService:
             CarLocationService.assign_car_to_spot_with_message(
                 car_id,
                 new_spot_id,
+                operations_session_id,
             )
         )
 
@@ -786,16 +957,21 @@ class CarLocationService:
     def move_car_with_message(
         car_id,
         new_spot_id,
+        operations_session_id=None,
     ):
         """
         Move a car to a new spot and return a useful
         success/failure message.
+
+        operations_session_id is optional and is recorded
+        with the movement when supplied.
         """
 
         return (
             CarLocationService.assign_car_to_spot_with_message(
                 car_id,
                 new_spot_id,
+                operations_session_id,
             )
         )
 
@@ -888,6 +1064,8 @@ class CarLocationService:
             car.industry_id = None
             car.track_id = None
             car.spot_id = None
+            car.operating_location_id = None
+            car.operating_track_id = None
             car.location = "Unassigned"
 
             #
@@ -940,6 +1118,9 @@ class CarLocationService:
             industry_name = None
             track_name = None
             spot_number = None
+            location_name = None
+            location_type = None
+            traffic_use = None
 
             #
             # Load industry.
@@ -975,6 +1156,28 @@ class CarLocationService:
                         track.name
                     )
 
+            if car.operating_location_id is not None:
+
+                operating_location = session.get(
+                    Location,
+                    car.operating_location_id,
+                )
+
+                if operating_location is not None:
+                    location_name = operating_location.name
+                    location_type = operating_location.location_type
+
+            if car.operating_track_id is not None:
+
+                operating_track = session.get(
+                    LocationTrack,
+                    car.operating_track_id,
+                )
+
+                if operating_track is not None:
+                    track_name = operating_track.name
+                    traffic_use = operating_track.traffic_use
+
             #
             # Load spot.
             #
@@ -1000,9 +1203,15 @@ class CarLocationService:
 
                 "industry": industry_name,
 
+                "operating_location": location_name,
+
+                "location_type": location_type,
+
                 "track": track_name,
 
                 "spot": spot_number,
+
+                "traffic_use": traffic_use,
 
                 "location": (
                     car.location

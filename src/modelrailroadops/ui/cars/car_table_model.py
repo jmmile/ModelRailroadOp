@@ -22,8 +22,11 @@ class CarTableModel(QAbstractTableModel):
         "Owner",
         "Type",
         "Length",
+        "Empty Weight (lb)",
+        "Load Limit (lb)",
+        "Max Gross (lb)",
         "Status",
-        "Location",
+        "Current Location",
     ]
 
     def __init__(self):
@@ -149,6 +152,36 @@ class CarTableModel(QAbstractTableModel):
                         )
                     )
 
+                    empty_weight_lbs = (
+                        normalized_row.get(
+                            "empty_weight_lbs"
+                        )
+                        or normalized_row.get(
+                            "empty_weight_(lb)"
+                        )
+                        or normalized_row.get(
+                            "empty_weight"
+                        )
+                        or normalized_row.get(
+                            "lt_wt"
+                        )
+                    )
+
+                    load_limit_lbs = (
+                        normalized_row.get(
+                            "load_limit_lbs"
+                        )
+                        or normalized_row.get(
+                            "load_limit_(lb)"
+                        )
+                        or normalized_row.get(
+                            "load_limit"
+                        )
+                        or normalized_row.get(
+                            "ld_lmt"
+                        )
+                    )
+
                     status = (
                         normalized_row.get(
                             "status",
@@ -160,6 +193,10 @@ class CarTableModel(QAbstractTableModel):
                     location = (
                         normalized_row.get(
                             "location",
+                            ""
+                        )
+                        or normalized_row.get(
+                            "current_location",
                             ""
                         )
                     )
@@ -189,6 +226,26 @@ class CarTableModel(QAbstractTableModel):
 
                         length = None
 
+                    if empty_weight_lbs:
+
+                        empty_weight_lbs = int(
+                            str(empty_weight_lbs).replace(",", "")
+                        )
+
+                    else:
+
+                        empty_weight_lbs = None
+
+                    if load_limit_lbs:
+
+                        load_limit_lbs = int(
+                            str(load_limit_lbs).replace(",", "")
+                        )
+
+                    else:
+
+                        load_limit_lbs = None
+
                     #
                     # Add the car.
                     #
@@ -199,6 +256,8 @@ class CarTableModel(QAbstractTableModel):
                         owner=owner,
                         car_type=car_type,
                         length=length,
+                        empty_weight_lbs=empty_weight_lbs,
+                        load_limit_lbs=load_limit_lbs,
                         status=status,
                         location=location,
                     )
@@ -255,8 +314,11 @@ class CarTableModel(QAbstractTableModel):
                 "Owner",
                 "Type",
                 "Length",
+                "Empty Weight (lb)",
+                "Load Limit (lb)",
+                "Max Gross (lb)",
                 "Status",
-                "Location",
+                "Current Location",
             ])
 
             #
@@ -273,6 +335,21 @@ class CarTableModel(QAbstractTableModel):
                     getattr(
                         car,
                         "length",
+                        ""
+                    ),
+                    getattr(
+                        car,
+                        "empty_weight_lbs",
+                        ""
+                    ),
+                    getattr(
+                        car,
+                        "load_limit_lbs",
+                        ""
+                    ),
+                    getattr(
+                        car,
+                        "maximum_gross_weight_lbs",
                         ""
                     ),
                     car.status,
@@ -417,11 +494,35 @@ class CarTableModel(QAbstractTableModel):
 
                 case 5:
 
+                    return getattr(
+                        car,
+                        "empty_weight_lbs",
+                        ""
+                    )
+
+                case 6:
+
+                    return getattr(
+                        car,
+                        "load_limit_lbs",
+                        ""
+                    )
+
+                case 7:
+
+                    return getattr(
+                        car,
+                        "maximum_gross_weight_lbs",
+                        ""
+                    )
+
+                case 8:
+
                     return (
                         f"{emoji} {display}"
                     ).strip()
 
-                case 6:
+                case 9:
 
                     return car.location
 
@@ -432,7 +533,7 @@ class CarTableModel(QAbstractTableModel):
 
         if (
             role == Qt.ForegroundRole
-            and index.column() == 5
+            and index.column() == 8
         ):
 
             return QColor(

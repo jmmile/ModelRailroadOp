@@ -1,3 +1,18 @@
-Reporting Mark,Number,Owner,Type,Length,Status,Location
-USLX,15006,Boise Cascade,Boxcar,60,Active,Cassette 1
-ATSF,10245,Santa Fe,Boxcar,50,Active,Cassette 1
+reporting_mark,number,owner,car_type,length,status,location
+ATFS,10245,ATFS,Box,50,Loaded,Unassigned
+ATSF,10245,ATSF,Box,50,Empty,Dallas
+BN,12345,BN,Box,50,Empty,Unassigned
+BN,555321,Burlington Northern,Center Beam Flatcar,73,Loaded,Yard C
+BNSF,12345,BNSF,Boxcar,50,Empty,Unassigned
+BNSF,123456,BNSF,Center Beam Flatcar,73,Available,Wilhaeuser Lumber Company - Shipping Track - Spot 1
+BNSF,586135,BNSF,Wood Chip Hopper,60,Loaded,Springfield
+CP,100545,Canadian Pacific,Covered Hopper,60,Empty,Acme Transfer Company - Loading Dock - Spot 1
+GTW,623546,GTW,Centerbeam,73,Empty,Detroit
+REMX,1052,RMEX,refrigerator,50,Empty,Quincy
+SP,76543,SP,Hopper,55,Empty,Cascade Feed - Grain Track - Spot 5
+SP,987654,Southern Pacific,Covered Hopper,55,Empty,Cascade Feed - Grain Track - Spot 4
+UP,45678,UP,Tank,62,Loaded,Pacific Paper Mill
+UP,545455,Union Pacific,Boxcar,60,Empty,Pacific Paper Mill - Boxcar Track - Spot 1
+UP,65615,Union Pacific,Cattle Car,50,Empty,Rustler Cattle Co. - Loading Dock - Spot 1
+USLX,14022,Weyerhauser,Boxcar,60,Available,Cassette 1
+USLX,15006,USLX,Box,60,Loaded,Chicago

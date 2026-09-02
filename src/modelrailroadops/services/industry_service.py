@@ -5,11 +5,44 @@ from sqlalchemy.orm import selectinload
 from modelrailroadops.database.database import SessionLocal
 
 from modelrailroadops.models.industry import Industry
+from modelrailroadops.models.location import Location
 from modelrailroadops.models.industry_track import IndustryTrack
 from modelrailroadops.models.spot import Spot
 
 
 class IndustryService:
+
+    @staticmethod
+    def _get_or_create_location(
+        session,
+        name,
+    ):
+
+        operating_location = (
+            session.execute(
+                select(Location).where(
+                    Location.name == name
+                )
+            )
+            .scalars()
+            .first()
+        )
+
+        if operating_location is None:
+
+            operating_location = Location(
+                name=name,
+                location_type="INDUSTRY",
+                active=True,
+            )
+
+            session.add(
+                operating_location
+            )
+
+            session.flush()
+
+        return operating_location
     """
     Handles industry database operations.
     """
@@ -134,11 +167,19 @@ class IndustryService:
             # Create new industry.
             #
 
+            operating_location = (
+                IndustryService._get_or_create_location(
+                    session,
+                    name,
+                )
+            )
+
             industry = Industry(
                 name=name,
                 railroad=railroad,
                 location=location,
                 notes=notes,
+                operating_location_id=operating_location.id,
             )
 
             session.add(
@@ -227,6 +268,17 @@ class IndustryService:
             industry.location = location
 
             industry.notes = notes
+
+            operating_location = (
+                IndustryService._get_or_create_location(
+                    session,
+                    name,
+                )
+            )
+
+            industry.operating_location_id = (
+                operating_location.id
+            )
 
             session.commit()
 

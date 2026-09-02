@@ -70,6 +70,8 @@ class CarService:
         owner="",
         car_type="",
         length=None,
+        empty_weight_lbs=None,
+        load_limit_lbs=None,
         status="Available",
         location=""
     ):
@@ -96,6 +98,8 @@ class CarService:
                 owner=owner,
                 car_type=car_type,
                 length=length,
+                empty_weight_lbs=empty_weight_lbs,
+                load_limit_lbs=load_limit_lbs,
                 status=status,
                 location=location,
             )
@@ -120,6 +124,8 @@ class CarService:
         owner="",
         car_type="",
         length=None,
+        empty_weight_lbs=None,
+        load_limit_lbs=None,
         status="Available",
         location=""
     ):
@@ -143,6 +149,10 @@ class CarService:
                 car.car_type = car_type
 
                 car.length = length
+
+                car.empty_weight_lbs = empty_weight_lbs
+
+                car.load_limit_lbs = load_limit_lbs
 
                 car.status = status
 
@@ -253,6 +263,10 @@ class CarService:
 
             car.spot_id = spot.id
 
+            car.operating_location_id = industry.operating_location_id
+
+            car.operating_track_id = track.operating_track_id
+
 
             #
             # Keep the existing location field synchronized
@@ -309,6 +323,10 @@ class CarService:
             car.track_id = None
 
             car.spot_id = None
+
+            car.operating_location_id = None
+
+            car.operating_track_id = None
 
             car.location = "Unassigned"
 

@@ -1,4 +1,3 @@
-#```python
 from PySide6.QtCore import (
     Qt,
     QAbstractTableModel,
@@ -7,14 +6,26 @@ from PySide6.QtCore import (
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from modelrailroadops.database.database import SessionLocal
+from modelrailroadops.database.database import (
+    SessionLocal,
+)
 
-from modelrailroadops.models.industry import Industry
-from modelrailroadops.models.industry_track import IndustryTrack
-from modelrailroadops.models.spot import Spot
+from modelrailroadops.models.industry import (
+    Industry,
+)
+
+from modelrailroadops.models.industry_track import (
+    IndustryTrack,
+)
+
+from modelrailroadops.models.spot import (
+    Spot,
+)
 
 
-class IndustryTrackTableModel(QAbstractTableModel):
+class IndustryTrackTableModel(
+    QAbstractTableModel
+):
     """
     Table model for industries and their industry tracks.
 
@@ -29,9 +40,6 @@ class IndustryTrackTableModel(QAbstractTableModel):
         Available = 0
 
     The underlying track value for these rows is None.
-
-    Industries are ordered with the most recently created
-    industry first.
     """
 
     HEADERS = [
@@ -42,10 +50,16 @@ class IndustryTrackTableModel(QAbstractTableModel):
         "Available",
     ]
 
-    def __init__(self):
+    def __init__(
+        self,
+    ):
         super().__init__()
 
         self.tracks = []
+
+        self.sort_column = 0
+
+        self.sort_order = Qt.AscendingOrder
 
         self.refresh()
 
@@ -53,16 +67,15 @@ class IndustryTrackTableModel(QAbstractTableModel):
     # Refresh
     #
 
-    def refresh(self):
+    def refresh(
+        self,
+    ):
         """
         Reload all industries and tracks directly from
         the database.
 
         Every industry receives at least one row, even
         when it has no tracks.
-
-        Industries are ordered by ID descending so the
-        newest industry appears first.
         """
 
         self.beginResetModel()
@@ -73,7 +86,9 @@ class IndustryTrackTableModel(QAbstractTableModel):
 
                 industries = (
                     session.execute(
-                        select(Industry)
+                        select(
+                            Industry
+                        )
                         .options(
                             selectinload(
                                 Industry.tracks
@@ -100,10 +115,6 @@ class IndustryTrackTableModel(QAbstractTableModel):
                     #
                     # Industry has no tracks.
                     #
-                    # Still create a row so the industry
-                    # can be selected and its first track
-                    # can be added.
-                    #
 
                     if not industry.tracks:
 
@@ -112,9 +123,11 @@ class IndustryTrackTableModel(QAbstractTableModel):
                                 "industry_id": industry.id,
                                 "industry_name": industry.name,
                                 "industry": industry,
+
                                 "track_id": None,
                                 "track_name": "No Tracks",
                                 "track": None,
+
                                 "spot_total": 0,
                                 "spot_occupied": 0,
                                 "spot_available": 0,
@@ -127,14 +140,7 @@ class IndustryTrackTableModel(QAbstractTableModel):
                     # Industry has one or more tracks.
                     #
 
-                    sorted_tracks = sorted(
-                        industry.tracks,
-                        key=lambda item: (
-                            item.name or ""
-                        ).lower(),
-                    )
-
-                    for track in sorted_tracks:
+                    for track in industry.tracks:
 
                         spot_total = len(
                             track.spots
@@ -156,20 +162,118 @@ class IndustryTrackTableModel(QAbstractTableModel):
                                 "industry_id": industry.id,
                                 "industry_name": industry.name,
                                 "industry": industry,
+
                                 "track_id": track.id,
                                 "track_name": track.name,
                                 "track": track,
+
                                 "spot_total": spot_total,
-                                "spot_occupied": spot_occupied,
-                                "spot_available": spot_available,
+                                "spot_occupied": (
+                                    spot_occupied
+                                ),
+                                "spot_available": (
+                                    spot_available
+                                ),
                             }
                         )
 
                 self.tracks = rows
 
+                #
+                # Apply the current table sort.
+                #
+
+                self._sort_rows()
+
         finally:
 
             self.endResetModel()
+
+    #
+    # Sort
+    #
+
+    def sort(
+        self,
+        column,
+        order=Qt.AscendingOrder,
+    ):
+        """
+        Sort the table when the user clicks a column
+        header.
+        """
+
+        self.layoutAboutToBeChanged.emit()
+
+        self.sort_column = column
+
+        self.sort_order = order
+
+        self._sort_rows()
+
+        self.layoutChanged.emit()
+
+    #
+    # Internal row sorting
+    #
+
+    def _sort_rows(
+        self,
+    ):
+        """
+        Sort the stored rows using the currently selected
+        column and sort order.
+        """
+
+        reverse = (
+            self.sort_order
+            == Qt.DescendingOrder
+        )
+
+        if self.sort_column == 0:
+
+            self.tracks.sort(
+                key=lambda row: (
+                    row["industry_name"] or ""
+                ).casefold(),
+                reverse=reverse,
+            )
+
+        elif self.sort_column == 1:
+
+            self.tracks.sort(
+                key=lambda row: (
+                    row["track_name"] or ""
+                ).casefold(),
+                reverse=reverse,
+            )
+
+        elif self.sort_column == 2:
+
+            self.tracks.sort(
+                key=lambda row: (
+                    row["spot_total"]
+                ),
+                reverse=reverse,
+            )
+
+        elif self.sort_column == 3:
+
+            self.tracks.sort(
+                key=lambda row: (
+                    row["spot_occupied"]
+                ),
+                reverse=reverse,
+            )
+
+        elif self.sort_column == 4:
+
+            self.tracks.sort(
+                key=lambda row: (
+                    row["spot_available"]
+                ),
+                reverse=reverse,
+            )
 
     #
     # Row count
@@ -179,7 +283,6 @@ class IndustryTrackTableModel(QAbstractTableModel):
         self,
         parent=None,
     ):
-
         return len(
             self.tracks
         )
@@ -192,7 +295,6 @@ class IndustryTrackTableModel(QAbstractTableModel):
         self,
         parent=None,
     ):
-
         return len(
             self.HEADERS
         )
@@ -207,15 +309,18 @@ class IndustryTrackTableModel(QAbstractTableModel):
         orientation,
         role,
     ):
-
         if role != Qt.DisplayRole:
 
             return None
 
         if orientation == Qt.Horizontal:
 
-            if 0 <= section < len(
-                self.HEADERS
+            if (
+                0
+                <= section
+                < len(
+                    self.HEADERS
+                )
             ):
 
                 return self.HEADERS[
@@ -237,7 +342,6 @@ class IndustryTrackTableModel(QAbstractTableModel):
         index,
         role,
     ):
-
         if not index.isValid():
 
             return None
@@ -325,9 +429,10 @@ class IndustryTrackTableModel(QAbstractTableModel):
         self,
         row,
     ):
-
         if not (
-            0 <= row < len(
+            0
+            <= row
+            < len(
                 self.tracks
             )
         ):
@@ -348,9 +453,10 @@ class IndustryTrackTableModel(QAbstractTableModel):
         self,
         row,
     ):
-
         if not (
-            0 <= row < len(
+            0
+            <= row
+            < len(
                 self.tracks
             )
         ):
@@ -371,9 +477,10 @@ class IndustryTrackTableModel(QAbstractTableModel):
         self,
         row,
     ):
-
         if not (
-            0 <= row < len(
+            0
+            <= row
+            < len(
                 self.tracks
             )
         ):
@@ -394,9 +501,10 @@ class IndustryTrackTableModel(QAbstractTableModel):
         self,
         row,
     ):
-
         if not (
-            0 <= row < len(
+            0
+            <= row
+            < len(
                 self.tracks
             )
         ):

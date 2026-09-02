@@ -1,4 +1,3 @@
-
 from PySide6.QtWidgets import (
     QMainWindow,
     QTabWidget,
@@ -32,6 +31,26 @@ from modelrailroadops.ui.widgets.car_history_widget import (
     CarHistoryWidget,
 )
 
+from modelrailroadops.ui.waybills.waybills_widget import (
+    WaybillsWidget,
+)
+
+from modelrailroadops.ui.operations.operations_sessions_widget import (
+    OperationsSessionsWidget,
+)
+
+from modelrailroadops.ui.switch_list.switch_list_widget import (
+    SwitchListWidget,
+)
+
+from modelrailroadops.ui.trains.trains_widget import (
+    TrainsWidget,
+)
+
+from modelrailroadops.ui.widgets.locations_widget import (
+    LocationsWidget,
+)
+
 
 class MainWindow(QMainWindow):
     """
@@ -56,7 +75,7 @@ class MainWindow(QMainWindow):
 
         self.resize(
             1200,
-            800
+            800,
         )
 
         #
@@ -73,7 +92,7 @@ class MainWindow(QMainWindow):
 
         self.tabs.addTab(
             self.roster_tab,
-            "Car Roster"
+            "Car Roster",
         )
 
         #
@@ -84,7 +103,7 @@ class MainWindow(QMainWindow):
 
         self.tabs.addTab(
             self.industry_tab,
-            "Industries"
+            "Industries",
         )
 
         #
@@ -97,7 +116,18 @@ class MainWindow(QMainWindow):
 
         self.tabs.addTab(
             self.industry_tracks_widget,
-            "Industry Tracks"
+            "Industry Tracks",
+        )
+
+        #
+        # General railroad locations and tracks
+        #
+
+        self.locations_widget = LocationsWidget()
+
+        self.tabs.addTab(
+            self.locations_widget,
+            "Locations",
         )
 
         #
@@ -119,7 +149,7 @@ class MainWindow(QMainWindow):
 
         self.tabs.addTab(
             self.car_locations_widget,
-            "Car Locations"
+            "Car Locations",
         )
 
         #
@@ -132,7 +162,7 @@ class MainWindow(QMainWindow):
 
         self.tabs.addTab(
             self.spot_occupancy_widget,
-            "Spot Occupancy"
+            "Spot Occupancy",
         )
 
         #
@@ -145,7 +175,7 @@ class MainWindow(QMainWindow):
 
         self.tabs.addTab(
             self.spot_manager_widget,
-            "Spots"
+            "Spots",
         )
 
         #
@@ -158,7 +188,59 @@ class MainWindow(QMainWindow):
 
         self.tabs.addTab(
             self.car_history_widget,
-            "Car History"
+            "Car History",
+        )
+
+        #
+        # Waybills
+        #
+
+        self.waybills_widget = (
+            WaybillsWidget()
+        )
+
+        self.tabs.addTab(
+            self.waybills_widget,
+            "Waybills",
+        )
+
+        #
+        # Operations Sessions
+        #
+
+        self.operations_sessions_widget = (
+            OperationsSessionsWidget()
+        )
+
+        self.tabs.addTab(
+            self.operations_sessions_widget,
+            "Operations Sessions",
+        )
+
+        #
+        # Switch List
+        #
+
+        self.switch_list_widget = (
+            SwitchListWidget()
+        )
+
+        self.tabs.addTab(
+            self.switch_list_widget,
+            "Switch List",
+        )
+
+        #
+        # Trains
+        #
+
+        self.trains_widget = (
+            TrainsWidget()
+        )
+
+        self.tabs.addTab(
+            self.trains_widget,
+            "Trains",
         )
 
         #
@@ -182,7 +264,9 @@ class MainWindow(QMainWindow):
     # Industry database changed
     #
 
-    def industry_changed(self):
+    def industry_changed(
+        self,
+    ):
         """
         Called whenever the Industries tab adds,
         edits, or deletes an industry.
@@ -199,7 +283,7 @@ class MainWindow(QMainWindow):
 
     def tab_changed(
         self,
-        index
+        index,
     ):
         """
         Refresh the database-backed widget when
@@ -235,6 +319,14 @@ class MainWindow(QMainWindow):
             self.industry_tracks_widget.refresh()
 
         #
+        # Locations
+        #
+
+        elif widget is self.locations_widget:
+
+            self.locations_widget.refresh()
+
+        #
         # Car Locations
         #
 
@@ -258,7 +350,7 @@ class MainWindow(QMainWindow):
 
             if hasattr(
                 self.spot_manager_widget,
-                "refresh"
+                "refresh",
             ):
 
                 self.spot_manager_widget.refresh()
@@ -271,7 +363,59 @@ class MainWindow(QMainWindow):
 
             if hasattr(
                 self.car_history_widget,
-                "refresh"
+                "refresh",
             ):
 
                 self.car_history_widget.refresh()
+
+        #
+        # Waybills
+        #
+
+        elif widget is self.waybills_widget:
+
+            if hasattr(
+                self.waybills_widget,
+                "refresh",
+            ):
+
+                self.waybills_widget.refresh()
+
+        #
+        # Operations Sessions
+        #
+
+        elif widget is self.operations_sessions_widget:
+
+            if hasattr(
+                self.operations_sessions_widget,
+                "refresh",
+            ):
+
+                self.operations_sessions_widget.refresh()
+
+        #
+        # Switch List
+        #
+
+        elif widget is self.switch_list_widget:
+
+            if hasattr(
+                self.switch_list_widget,
+                "refresh",
+            ):
+
+                self.switch_list_widget.refresh()
+
+        #
+        # Trains
+        #
+
+        elif widget is self.trains_widget:
+
+            if hasattr(
+                self.trains_widget,
+                "refresh",
+            ):
+
+                self.trains_widget.refresh()
