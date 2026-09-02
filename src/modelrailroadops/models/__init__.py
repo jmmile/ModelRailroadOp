@@ -12,6 +12,7 @@ from modelrailroadops.models.train import Train
 from modelrailroadops.models.train_route import TrainRoute
 from modelrailroadops.models.location import Location
 from modelrailroadops.models.location_track import LocationTrack
+from modelrailroadops.models.locomotive import Locomotive
 
 
 __all__ = [
@@ -29,4 +30,5 @@ __all__ = [
     "TrainRoute",
     "Location",
     "LocationTrack",
+    "Locomotive",
 ]
