@@ -59,7 +59,7 @@ class AddTrainDialog(QDialog):
 
         self.resize(
             520,
-            500,
+            560,
         )
 
         #
@@ -236,6 +236,50 @@ class AddTrainDialog(QDialog):
         form_layout.addRow(
             "Priority:",
             self.priority_edit,
+        )
+
+        #
+        # Maximum cars
+        #
+
+        self.maximum_cars_edit = QSpinBox()
+
+        self.maximum_cars_edit.setRange(
+            0,
+            999,
+        )
+
+        self.maximum_cars_edit.setSpecialValueText(
+            "Not set"
+        )
+
+        form_layout.addRow(
+            "Maximum Cars:",
+            self.maximum_cars_edit,
+        )
+
+        #
+        # Maximum tonnage
+        #
+
+        self.maximum_tonnage_edit = QSpinBox()
+
+        self.maximum_tonnage_edit.setRange(
+            0,
+            999999,
+        )
+
+        self.maximum_tonnage_edit.setSpecialValueText(
+            "Not set"
+        )
+
+        self.maximum_tonnage_edit.setSuffix(
+            " tons"
+        )
+
+        form_layout.addRow(
+            "Maximum Tonnage:",
+            self.maximum_tonnage_edit,
         )
 
         #
@@ -454,7 +498,11 @@ class AddTrainDialog(QDialog):
                 ):
                     continue
 
-                location_type = location.location_type.replace("_", " ").title()
+                location_type = location.location_type.replace(
+                    "_",
+                    " ",
+                ).title()
+
                 combo.addItem(
                     f"{location.name} ({location_type})",
                     location.id,
@@ -476,6 +524,7 @@ class AddTrainDialog(QDialog):
         track_combo.addItem(prompt, None)
 
         location_id = location_combo.currentData()
+
         location = next(
             (
                 item
@@ -495,8 +544,16 @@ class AddTrainDialog(QDialog):
             ):
                 continue
 
-            track_type = track.track_type.replace("_", " ").title()
-            traffic_use = track.traffic_use.replace("_", " ").title()
+            track_type = track.track_type.replace(
+                "_",
+                " ",
+            ).title()
+
+            traffic_use = track.traffic_use.replace(
+                "_",
+                " ",
+            ).title()
+
             track_combo.addItem(
                 f"{track.name} ({track_type}, {traffic_use})",
                 track.id,
@@ -535,13 +592,16 @@ class AddTrainDialog(QDialog):
         track_loader()
 
         track_index = track_combo.findData(track_id)
+
         if track_index >= 0:
             track_combo.setCurrentIndex(track_index)
 
     def load_train_endpoints(self):
         """Load endpoints from the route, falling back to legacy names."""
 
-        routes = TrainRouteService.get_by_train(self.train.id)
+        routes = TrainRouteService.get_by_train(
+            self.train.id
+        )
 
         if routes:
             origin_route = routes[0]
@@ -559,7 +619,12 @@ class AddTrainDialog(QDialog):
                     ),
                     None,
                 )
-                return location.id if location is not None else None
+
+                return (
+                    location.id
+                    if location is not None
+                    else None
+                )
 
             self._select_endpoint(
                 self.origin_location_combo,
@@ -568,6 +633,7 @@ class AddTrainDialog(QDialog):
                 origin_route.location_track_id,
                 self.load_origin_tracks,
             )
+
             self._select_endpoint(
                 self.destination_location_combo,
                 self.destination_track_combo,
@@ -575,6 +641,7 @@ class AddTrainDialog(QDialog):
                 destination_route.location_track_id,
                 self.load_destination_tracks,
             )
+
             return
 
         endpoint_names = (
@@ -592,7 +659,13 @@ class AddTrainDialog(QDialog):
             ),
         )
 
-        for name, location_combo, track_combo, track_loader in endpoint_names:
+        for (
+            name,
+            location_combo,
+            track_combo,
+            track_loader,
+        ) in endpoint_names:
+
             location = next(
                 (
                     item
@@ -601,6 +674,7 @@ class AddTrainDialog(QDialog):
                 ),
                 None,
             )
+
             if location is not None:
                 self._select_endpoint(
                     location_combo,
@@ -628,19 +702,33 @@ class AddTrainDialog(QDialog):
             or ""
         )
 
-        train_type = self.train.train_type or ""
+        train_type = (
+            self.train.train_type
+            or ""
+        )
+
         normalized_train_type = (
             "Extra Movement"
             if train_type.strip().casefold() == "extra"
             else train_type.strip()
         )
+
         train_type_index = self.train_type_edit.findData(
             normalized_train_type
         )
 
         if train_type_index < 0:
-            for index in range(self.train_type_edit.count()):
-                item_data = self.train_type_edit.itemData(index)
+
+            for index in range(
+                self.train_type_edit.count()
+            ):
+
+                item_data = (
+                    self.train_type_edit.itemData(
+                        index
+                    )
+                )
+
                 if (
                     item_data
                     and item_data.casefold()
@@ -650,9 +738,16 @@ class AddTrainDialog(QDialog):
                     break
 
         if train_type_index >= 0:
-            self.train_type_edit.setCurrentIndex(train_type_index)
+
+            self.train_type_edit.setCurrentIndex(
+                train_type_index
+            )
+
         else:
-            self.train_type_edit.setEditText(train_type)
+
+            self.train_type_edit.setEditText(
+                train_type
+            )
 
         self.description_edit.setText(
             self.train.description
@@ -671,6 +766,16 @@ class AddTrainDialog(QDialog):
             or 0
         )
 
+        self.maximum_cars_edit.setValue(
+            self.train.maximum_cars
+            or 0
+        )
+
+        self.maximum_tonnage_edit.setValue(
+            self.train.maximum_tonnage
+            or 0
+        )
+
         self.operating_days_edit.setText(
             self.train.operating_days
             or ""
@@ -678,7 +783,9 @@ class AddTrainDialog(QDialog):
 
         if self.train.scheduled_departure is not None:
 
-            departure = self.train.scheduled_departure
+            departure = (
+                self.train.scheduled_departure
+            )
 
             self.departure_time_edit.setTime(
                 QTime(
@@ -694,7 +801,9 @@ class AddTrainDialog(QDialog):
 
         if self.train.scheduled_arrival is not None:
 
-            arrival = self.train.scheduled_arrival
+            arrival = (
+                self.train.scheduled_arrival
+            )
 
             self.arrival_time_edit.setTime(
                 QTime(
@@ -732,17 +841,30 @@ class AddTrainDialog(QDialog):
             .strip()
         )
 
-        train_type = self.current_train_type()
+        train_type = (
+            self.current_train_type()
+        )
 
         description = (
             self.description_edit.text()
             .strip()
         )
 
-        origin_location_id = self.origin_location_combo.currentData()
-        origin_track_id = self.origin_track_combo.currentData()
-        destination_location_id = self.destination_location_combo.currentData()
-        destination_track_id = self.destination_track_combo.currentData()
+        origin_location_id = (
+            self.origin_location_combo.currentData()
+        )
+
+        origin_track_id = (
+            self.origin_track_combo.currentData()
+        )
+
+        destination_location_id = (
+            self.destination_location_combo.currentData()
+        )
+
+        destination_track_id = (
+            self.destination_track_combo.currentData()
+        )
 
         origin_location = next(
             (
@@ -752,6 +874,7 @@ class AddTrainDialog(QDialog):
             ),
             None,
         )
+
         destination_location = next(
             (
                 item
@@ -761,7 +884,12 @@ class AddTrainDialog(QDialog):
             None,
         )
 
-        origin = origin_location.name if origin_location is not None else ""
+        origin = (
+            origin_location.name
+            if origin_location is not None
+            else ""
+        )
+
         destination = (
             destination_location.name
             if destination_location is not None
@@ -775,6 +903,16 @@ class AddTrainDialog(QDialog):
 
         priority = (
             self.priority_edit.value()
+            or None
+        )
+
+        maximum_cars = (
+            self.maximum_cars_edit.value()
+            or None
+        )
+
+        maximum_tonnage = (
+            self.maximum_tonnage_edit.value()
             or None
         )
 
@@ -828,46 +966,60 @@ class AddTrainDialog(QDialog):
             return
 
         if origin_location_id is None:
+
             QMessageBox.warning(
                 self,
                 "Train",
                 "Select an origin location.",
             )
+
             self.origin_location_combo.setFocus()
+
             return
 
         if origin_track_id is None:
+
             QMessageBox.warning(
                 self,
                 "Train",
                 "Select an origin track.",
             )
+
             self.origin_track_combo.setFocus()
+
             return
 
         if destination_location_id is None:
+
             QMessageBox.warning(
                 self,
                 "Train",
                 "Select a destination location.",
             )
+
             self.destination_location_combo.setFocus()
+
             return
 
         if destination_track_id is None:
+
             QMessageBox.warning(
                 self,
                 "Train",
                 "Select a destination track.",
             )
+
             self.destination_track_combo.setFocus()
+
             return
 
         #
         # Create new Train
         #
 
-        creating_train = self.train is None
+        creating_train = (
+            self.train is None
+        )
 
         if creating_train:
 
@@ -882,6 +1034,8 @@ class AddTrainDialog(QDialog):
                     active=active,
                     train_type=train_type,
                     priority=priority,
+                    maximum_cars=maximum_cars,
+                    maximum_tonnage=maximum_tonnage,
                     operating_days=operating_days,
                     scheduled_departure=scheduled_departure,
                     scheduled_arrival=scheduled_arrival,
@@ -906,6 +1060,8 @@ class AddTrainDialog(QDialog):
                     active=active,
                     train_type=train_type,
                     priority=priority,
+                    maximum_cars=maximum_cars,
+                    maximum_tonnage=maximum_tonnage,
                     operating_days=operating_days,
                     scheduled_departure=scheduled_departure,
                     scheduled_arrival=scheduled_arrival,
@@ -928,8 +1084,14 @@ class AddTrainDialog(QDialog):
 
             return
 
-        saved_train_id = result.id
-        endpoints_success, endpoints_result = TrainRouteService.set_endpoints(
+        saved_train_id = (
+            result.id
+        )
+
+        (
+            endpoints_success,
+            endpoints_result,
+        ) = TrainRouteService.set_endpoints(
             train_id=saved_train_id,
             origin_location_id=origin_location_id,
             origin_track_id=origin_track_id,
@@ -938,10 +1100,19 @@ class AddTrainDialog(QDialog):
         )
 
         if not endpoints_success:
+
             if creating_train:
-                TrainService.delete(saved_train_id)
-                message = str(endpoints_result)
+
+                TrainService.delete(
+                    saved_train_id
+                )
+
+                message = str(
+                    endpoints_result
+                )
+
             else:
+
                 message = (
                     "The train details were saved, but its route endpoints "
                     f"could not be updated: {endpoints_result}"
@@ -952,6 +1123,7 @@ class AddTrainDialog(QDialog):
                 "Train Route",
                 message,
             )
+
             return
 
         #

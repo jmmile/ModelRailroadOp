@@ -16,7 +16,6 @@ from sqlalchemy.orm import (
 
 from modelrailroadops.database.base import Base
 
-
 if TYPE_CHECKING:
     from modelrailroadops.models.operations_session_train import (
         OperationsSessionTrain,
@@ -193,6 +192,23 @@ class Train(Base):
     #
 
     priority: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    #
+    # Operating limits
+    #
+    # These define the maximum planned train size.
+    # A null value means no limit has been defined.
+    #
+
+    maximum_cars: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    maximum_tonnage: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
     )

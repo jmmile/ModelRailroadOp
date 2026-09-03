@@ -634,7 +634,8 @@ class OperationsSessionsWidget(QWidget):
                 "Consist Horsepower: 0 HP"
                 "  |  Maximum Cars: 0"
                 "  |  Maximum Train Tonnage: 0.0 tons"
-                "  |  Horsepower/Ton: —"
+                "  |  Horsepower/Ton: -"
+                "  |  Operating Limits: Not set"
             )
         )
 
@@ -1378,7 +1379,7 @@ class OperationsSessionsWidget(QWidget):
             )
 
         horsepower_per_ton_text = (
-            "Horsepower/Ton: —"
+            "Horsepower/Ton: -"
         )
 
         if (
@@ -1398,12 +1399,124 @@ class OperationsSessionsWidget(QWidget):
                 f"{horsepower_per_ton:,.1f}"
             )
 
+        operating_limits_text = (
+            "Operating Limits: Not set"
+        )
+
+        train_id = (
+            self.get_selected_train_id()
+        )
+
+        train = self.get_train(
+            train_id
+        )
+
+        if train is not None:
+
+            maximum_cars_limit = (
+                train.maximum_cars
+            )
+
+            maximum_tonnage_limit = (
+                train.maximum_tonnage
+            )
+
+            exceeded = []
+            unverifiable = []
+
+            if (
+                maximum_cars_limit is not None
+                and self.maximum_car_count
+                > maximum_cars_limit
+            ):
+
+                exceeded.append(
+                    (
+                        f"Cars "
+                        f"{self.maximum_car_count}/"
+                        f"{maximum_cars_limit}"
+                    )
+                )
+
+            if maximum_tonnage_limit is not None:
+
+                if self.missing_weight_count:
+
+                    if (
+                        self.maximum_tonnage
+                        > maximum_tonnage_limit
+                    ):
+
+                        exceeded.append(
+                            (
+                                f"Tonnage at least "
+                                f"{self.maximum_tonnage:,.1f}/"
+                                f"{maximum_tonnage_limit:,} tons"
+                            )
+                        )
+
+                    else:
+
+                        unverifiable.append(
+                            "Tonnage cannot be verified"
+                        )
+
+                elif (
+                    self.maximum_tonnage
+                    > maximum_tonnage_limit
+                ):
+
+                    exceeded.append(
+                        (
+                            f"Tonnage "
+                            f"{self.maximum_tonnage:,.1f}/"
+                            f"{maximum_tonnage_limit:,} tons"
+                        )
+                    )
+
+            if exceeded:
+
+                operating_limits_text = (
+                    "Operating Limits: EXCEEDED - "
+                    + "; ".join(
+                        exceeded
+                    )
+                )
+
+                if unverifiable:
+
+                    operating_limits_text += (
+                        "; "
+                        + "; ".join(
+                            unverifiable
+                        )
+                    )
+
+            elif unverifiable:
+
+                operating_limits_text = (
+                    "Operating Limits: "
+                    + "; ".join(
+                        unverifiable
+                    )
+                )
+
+            elif (
+                maximum_cars_limit is not None
+                or maximum_tonnage_limit is not None
+            ):
+
+                operating_limits_text = (
+                    "Operating Limits: Within limits"
+                )
+
         self.train_power_summary_label.setText(
             (
                 f"{horsepower_text}"
                 f"  |  {car_count_text}"
                 f"  |  {tonnage_text}"
                 f"  |  {horsepower_per_ton_text}"
+                f"  |  {operating_limits_text}"
             )
         )
 

@@ -115,6 +115,8 @@ class TrainService:
         active=True,
         train_type=None,
         priority=None,
+        maximum_cars=None,
+        maximum_tonnage=None,
         operating_days=None,
         scheduled_departure=None,
         scheduled_arrival=None,
@@ -144,6 +146,26 @@ class TrainService:
             return (
                 False,
                 "Train number is required.",
+            )
+
+        if (
+            maximum_cars is not None
+            and maximum_cars <= 0
+        ):
+
+            return (
+                False,
+                "Maximum cars must be greater than zero.",
+            )
+
+        if (
+            maximum_tonnage is not None
+            and maximum_tonnage <= 0
+        ):
+
+            return (
+                False,
+                "Maximum tonnage must be greater than zero.",
             )
 
         with SessionLocal() as session:
@@ -200,6 +222,8 @@ class TrainService:
                     else None
                 ),
                 priority=priority,
+                maximum_cars=maximum_cars,
+                maximum_tonnage=maximum_tonnage,
                 operating_days=(
                     operating_days.strip()
                     if operating_days
@@ -243,6 +267,8 @@ class TrainService:
         active=True,
         train_type=None,
         priority=None,
+        maximum_cars=None,
+        maximum_tonnage=None,
         operating_days=None,
         scheduled_departure=None,
         scheduled_arrival=None,
@@ -279,6 +305,26 @@ class TrainService:
             return (
                 False,
                 "Train number is required.",
+            )
+
+        if (
+            maximum_cars is not None
+            and maximum_cars <= 0
+        ):
+
+            return (
+                False,
+                "Maximum cars must be greater than zero.",
+            )
+
+        if (
+            maximum_tonnage is not None
+            and maximum_tonnage <= 0
+        ):
+
+            return (
+                False,
+                "Maximum tonnage must be greater than zero.",
             )
 
         with SessionLocal() as session:
@@ -358,6 +404,10 @@ class TrainService:
             )
 
             train.priority = priority
+
+            train.maximum_cars = maximum_cars
+
+            train.maximum_tonnage = maximum_tonnage
 
             train.operating_days = (
                 operating_days.strip()
@@ -440,10 +490,9 @@ class TrainService:
 
                 return (
                     False,
-                    (
-                        f"Train {train_id} "
-                        "was not found."
-                    ),
+                    "Train "
+                    f"{train_id} "
+                    "was not found.",
                 )
 
             train.active = bool(
