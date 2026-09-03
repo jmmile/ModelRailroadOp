@@ -1,4 +1,3 @@
-
 import csv
 
 from PySide6.QtCore import (
@@ -55,7 +54,7 @@ class CarTableModel(QAbstractTableModel):
 
     def import_from_csv(
         self,
-        filename
+        filename,
     ):
 
         added = 0
@@ -64,7 +63,7 @@ class CarTableModel(QAbstractTableModel):
         with open(
             filename,
             newline="",
-            encoding="utf-8-sig"
+            encoding="utf-8-sig",
         ) as file:
 
             reader = csv.DictReader(file)
@@ -97,7 +96,7 @@ class CarTableModel(QAbstractTableModel):
                         .lower()
                         .replace(
                             " ",
-                            "_"
+                            "_",
                         )
                     )
 
@@ -107,7 +106,7 @@ class CarTableModel(QAbstractTableModel):
                         value.strip()
                         if isinstance(
                             value,
-                            str
+                            str,
                         )
                         else value
                     )
@@ -117,32 +116,32 @@ class CarTableModel(QAbstractTableModel):
                     reporting_mark = (
                         normalized_row.get(
                             "reporting_mark",
-                            ""
+                            "",
                         )
                     )
 
                     number = (
                         normalized_row.get(
                             "number",
-                            ""
+                            "",
                         )
                     )
 
                     owner = (
                         normalized_row.get(
                             "owner",
-                            ""
+                            "",
                         )
                     )
 
                     car_type = (
                         normalized_row.get(
                             "car_type",
-                            ""
+                            "",
                         )
                         or normalized_row.get(
                             "type",
-                            ""
+                            "",
                         )
                     )
 
@@ -185,7 +184,7 @@ class CarTableModel(QAbstractTableModel):
                     status = (
                         normalized_row.get(
                             "status",
-                            "Available"
+                            "Available",
                         )
                         or "Available"
                     )
@@ -193,11 +192,11 @@ class CarTableModel(QAbstractTableModel):
                     location = (
                         normalized_row.get(
                             "location",
-                            ""
+                            "",
                         )
                         or normalized_row.get(
                             "current_location",
-                            ""
+                            "",
                         )
                     )
 
@@ -205,7 +204,10 @@ class CarTableModel(QAbstractTableModel):
                     # Required fields.
                     #
 
-                    if not reporting_mark or not number:
+                    if (
+                        not reporting_mark
+                        or not number
+                    ):
 
                         skipped += 1
 
@@ -226,10 +228,20 @@ class CarTableModel(QAbstractTableModel):
 
                         length = None
 
+                    #
+                    # Convert weight fields to integers
+                    # when supplied.
+                    #
+
                     if empty_weight_lbs:
 
                         empty_weight_lbs = int(
-                            str(empty_weight_lbs).replace(",", "")
+                            str(
+                                empty_weight_lbs
+                            ).replace(
+                                ",",
+                                "",
+                            )
                         )
 
                     else:
@@ -239,7 +251,12 @@ class CarTableModel(QAbstractTableModel):
                     if load_limit_lbs:
 
                         load_limit_lbs = int(
-                            str(load_limit_lbs).replace(",", "")
+                            str(
+                                load_limit_lbs
+                            ).replace(
+                                ",",
+                                "",
+                            )
                         )
 
                     else:
@@ -247,7 +264,93 @@ class CarTableModel(QAbstractTableModel):
                         load_limit_lbs = None
 
                     #
-                    # Add the car.
+                    # Check whether the car already exists.
+                    #
+                    # Reporting Mark + Number uniquely
+                    # identifies a freight car.
+                    #
+
+                    existing_car = (
+                        CarService.get_by_reporting_mark_and_number(
+                            reporting_mark,
+                            number,
+                        )
+                    )
+
+                    if existing_car is not None:
+
+                        #
+                        # Existing cars are updated using
+                        # safe-merge behavior.
+                        #
+                        # A populated CSV field replaces the
+                        # current database value.
+                        #
+                        # A blank CSV field preserves the
+                        # current database value.
+                        #
+                        # Operational status and location are
+                        # always preserved from the database.
+                        #
+
+                        updated_owner = (
+                            owner
+                            if owner
+                            else existing_car.owner
+                        )
+
+                        updated_car_type = (
+                            car_type
+                            if car_type
+                            else existing_car.car_type
+                        )
+
+                        updated_length = (
+                            length
+                            if length is not None
+                            else existing_car.length
+                        )
+
+                        updated_empty_weight_lbs = (
+                            empty_weight_lbs
+                            if empty_weight_lbs is not None
+                            else existing_car.empty_weight_lbs
+                        )
+
+                        updated_load_limit_lbs = (
+                            load_limit_lbs
+                            if load_limit_lbs is not None
+                            else existing_car.load_limit_lbs
+                        )
+
+                        updated_car = CarService.update(
+                            car_id=existing_car.id,
+                            reporting_mark=existing_car.reporting_mark,
+                            number=existing_car.number,
+                            owner=updated_owner,
+                            car_type=updated_car_type,
+                            length=updated_length,
+                            empty_weight_lbs=updated_empty_weight_lbs,
+                            load_limit_lbs=updated_load_limit_lbs,
+                            status=existing_car.status,
+                            location=existing_car.location,
+                        )
+
+                        if updated_car is not None:
+
+                            added += 1
+
+                        else:
+
+                            skipped += 1
+
+                        continue
+
+                    #
+                    # Car does not already exist.
+                    #
+                    # For a new car, blank optional CSV
+                    # fields remain blank.
                     #
 
                     car = CarService.add(
@@ -267,10 +370,6 @@ class CarTableModel(QAbstractTableModel):
                         added += 1
 
                     else:
-
-                        #
-                        # Car already exists.
-                        #
 
                         skipped += 1
 
@@ -292,14 +391,14 @@ class CarTableModel(QAbstractTableModel):
 
     def export_to_csv(
         self,
-        filename
+        filename,
     ):
 
         with open(
             filename,
             "w",
             newline="",
-            encoding="utf-8"
+            encoding="utf-8",
         ) as file:
 
             writer = csv.writer(file)
@@ -335,22 +434,22 @@ class CarTableModel(QAbstractTableModel):
                     getattr(
                         car,
                         "length",
-                        ""
+                        "",
                     ),
                     getattr(
                         car,
                         "empty_weight_lbs",
-                        ""
+                        "",
                     ),
                     getattr(
                         car,
                         "load_limit_lbs",
-                        ""
+                        "",
                     ),
                     getattr(
                         car,
                         "maximum_gross_weight_lbs",
-                        ""
+                        "",
                     ),
                     car.status,
                     car.location,
@@ -362,7 +461,7 @@ class CarTableModel(QAbstractTableModel):
 
     def rowCount(
         self,
-        parent=None
+        parent=None,
     ):
 
         return len(
@@ -375,7 +474,7 @@ class CarTableModel(QAbstractTableModel):
 
     def columnCount(
         self,
-        parent=None
+        parent=None,
     ):
 
         return len(
@@ -390,7 +489,7 @@ class CarTableModel(QAbstractTableModel):
         self,
         section,
         orientation,
-        role
+        role,
     ):
 
         if role != Qt.DisplayRole:
@@ -412,7 +511,7 @@ class CarTableModel(QAbstractTableModel):
     def data(
         self,
         index,
-        role
+        role,
     ):
 
         if not index.isValid():
@@ -427,27 +526,27 @@ class CarTableModel(QAbstractTableModel):
 
             "available": (
                 "🟢",
-                "Available"
+                "Available",
             ),
 
             "loaded": (
                 "🔵",
-                "Loaded"
+                "Loaded",
             ),
 
             "empty": (
                 "🟡",
-                "Empty"
+                "Empty",
             ),
 
             "in shop": (
                 "🔴",
-                "In Shop"
+                "In Shop",
             ),
 
             "interchange track": (
                 "🟣",
-                "Interchange"
+                "Interchange",
             ),
 
         }
@@ -460,7 +559,7 @@ class CarTableModel(QAbstractTableModel):
             key,
             (
                 "",
-                car.status or ""
+                car.status or "",
             )
         )
 
@@ -489,7 +588,7 @@ class CarTableModel(QAbstractTableModel):
                     return getattr(
                         car,
                         "length",
-                        ""
+                        "",
                     )
 
                 case 5:
@@ -497,7 +596,7 @@ class CarTableModel(QAbstractTableModel):
                     return getattr(
                         car,
                         "empty_weight_lbs",
-                        ""
+                        "",
                     )
 
                 case 6:
@@ -505,7 +604,7 @@ class CarTableModel(QAbstractTableModel):
                     return getattr(
                         car,
                         "load_limit_lbs",
-                        ""
+                        "",
                     )
 
                 case 7:
@@ -513,7 +612,7 @@ class CarTableModel(QAbstractTableModel):
                     return getattr(
                         car,
                         "maximum_gross_weight_lbs",
-                        ""
+                        "",
                     )
 
                 case 8:
@@ -548,7 +647,7 @@ class CarTableModel(QAbstractTableModel):
 
     def get_car(
         self,
-        row
+        row,
     ):
 
         if 0 <= row < len(
