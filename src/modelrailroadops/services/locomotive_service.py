@@ -66,6 +66,7 @@ class LocomotiveService:
         manufacturer="",
         locomotive_type="Diesel",
         horsepower=None,
+        dcc_address=None,
         length=None,
         status="AVAILABLE",
         notes="",
@@ -96,6 +97,7 @@ class LocomotiveService:
                 manufacturer=manufacturer,
                 locomotive_type=locomotive_type,
                 horsepower=horsepower,
+                dcc_address=dcc_address,
                 length=length,
                 status=status,
                 notes=notes,
@@ -123,6 +125,7 @@ class LocomotiveService:
         manufacturer="",
         locomotive_type="Diesel",
         horsepower=None,
+        dcc_address=None,
         length=None,
         status="AVAILABLE",
         notes="",
@@ -168,6 +171,8 @@ class LocomotiveService:
             locomotive.locomotive_type = locomotive_type
 
             locomotive.horsepower = horsepower
+
+            locomotive.dcc_address = dcc_address
 
             locomotive.length = length
 

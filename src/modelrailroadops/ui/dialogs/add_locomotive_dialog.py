@@ -36,7 +36,7 @@ class AddLocomotiveDialog(QDialog):
 
         self.resize(
             475,
-            500,
+            525,
         )
 
         layout = QVBoxLayout(
@@ -82,6 +82,12 @@ class AddLocomotiveDialog(QDialog):
 
         self.horsepower.setPlaceholderText(
             "Horsepower"
+        )
+
+        self.dcc_address = QLineEdit()
+
+        self.dcc_address.setPlaceholderText(
+            "DCC decoder address"
         )
 
         self.length = QLineEdit()
@@ -141,6 +147,11 @@ class AddLocomotiveDialog(QDialog):
         form.addRow(
             "Horsepower",
             self.horsepower,
+        )
+
+        form.addRow(
+            "DCC Decoder Address",
+            self.dcc_address,
         )
 
         form.addRow(
@@ -225,6 +236,14 @@ class AddLocomotiveDialog(QDialog):
                 self.horsepower.setText(
                     str(
                         self.locomotive.horsepower
+                    )
+                )
+
+            if self.locomotive.dcc_address is not None:
+
+                self.dcc_address.setText(
+                    str(
+                        self.locomotive.dcc_address
                     )
                 )
 
@@ -371,6 +390,15 @@ class AddLocomotiveDialog(QDialog):
 
             return
 
+        valid, dcc_address = self.parse_positive_integer(
+            self.dcc_address,
+            "DCC Decoder Address",
+        )
+
+        if not valid:
+
+            return
+
         valid, length = self.parse_positive_integer(
             self.length,
             "Length",
@@ -391,6 +419,7 @@ class AddLocomotiveDialog(QDialog):
                 manufacturer=manufacturer,
                 locomotive_type=locomotive_type,
                 horsepower=horsepower,
+                dcc_address=dcc_address,
                 length=length,
                 status=status,
                 notes=notes,
@@ -420,6 +449,7 @@ class AddLocomotiveDialog(QDialog):
                 manufacturer=manufacturer,
                 locomotive_type=locomotive_type,
                 horsepower=horsepower,
+                dcc_address=dcc_address,
                 length=length,
                 status=status,
                 notes=notes,

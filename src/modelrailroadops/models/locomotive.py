@@ -77,6 +77,11 @@ class Locomotive(Base):
         nullable=True,
     )
 
+    dcc_address: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
     length: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,

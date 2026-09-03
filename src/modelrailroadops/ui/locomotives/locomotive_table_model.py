@@ -25,6 +25,7 @@ class LocomotiveTableModel(QAbstractTableModel):
         "Manufacturer",
         "Type",
         "Horsepower",
+        "DCC Address",
         "Length",
         "Status",
     ]
@@ -156,6 +157,15 @@ class LocomotiveTableModel(QAbstractTableModel):
                         )
                     )
 
+                    dcc_address = (
+                        normalized_row.get(
+                            "dcc_address",
+                        )
+                        or normalized_row.get(
+                            "dcc_decoder_address",
+                        )
+                    )
+
                     length = (
                         normalized_row.get(
                             "length",
@@ -196,6 +206,19 @@ class LocomotiveTableModel(QAbstractTableModel):
 
                         horsepower = None
 
+                    if dcc_address:
+
+                        dcc_address = int(
+                            str(dcc_address).replace(
+                                ",",
+                                "",
+                            )
+                        )
+
+                    else:
+
+                        dcc_address = None
+
                     if length:
 
                         length = int(
@@ -214,6 +237,7 @@ class LocomotiveTableModel(QAbstractTableModel):
                         manufacturer=manufacturer,
                         locomotive_type=locomotive_type,
                         horsepower=horsepower,
+                        dcc_address=dcc_address,
                         length=length,
                         status=status,
                         notes=notes,
@@ -263,6 +287,7 @@ class LocomotiveTableModel(QAbstractTableModel):
                 "Manufacturer",
                 "Type",
                 "Horsepower",
+                "DCC Address",
                 "Length",
                 "Status",
                 "Notes",
@@ -278,6 +303,7 @@ class LocomotiveTableModel(QAbstractTableModel):
                     locomotive.manufacturer,
                     locomotive.locomotive_type,
                     locomotive.horsepower,
+                    locomotive.dcc_address,
                     locomotive.length,
                     locomotive.status,
                     locomotive.notes,
@@ -424,12 +450,20 @@ class LocomotiveTableModel(QAbstractTableModel):
                 case 7:
 
                     return (
+                        locomotive.dcc_address
+                        if locomotive.dcc_address is not None
+                        else ""
+                    )
+
+                case 8:
+
+                    return (
                         locomotive.length
                         if locomotive.length is not None
                         else ""
                     )
 
-                case 8:
+                case 9:
 
                     return (
                         f"{emoji} {display}"
@@ -437,7 +471,7 @@ class LocomotiveTableModel(QAbstractTableModel):
 
         if (
             role == Qt.ForegroundRole
-            and index.column() == 8
+            and index.column() == 9
         ):
 
             return QColor(
