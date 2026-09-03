@@ -561,6 +561,14 @@ class OperationsSessionsWidget(QWidget):
             "Remove Locomotive"
         )
 
+        self.move_locomotive_up_button = QPushButton(
+            "Move Up"
+        )
+
+        self.move_locomotive_down_button = QPushButton(
+            "Move Down"
+        )
+
         self.refresh_locomotives_button = QPushButton(
             "Refresh Motive Power"
         )
@@ -571,6 +579,14 @@ class OperationsSessionsWidget(QWidget):
 
         locomotive_button_layout.addWidget(
             self.remove_locomotive_button
+        )
+
+        locomotive_button_layout.addWidget(
+            self.move_locomotive_up_button
+        )
+
+        locomotive_button_layout.addWidget(
+            self.move_locomotive_down_button
         )
 
         locomotive_button_layout.addWidget(
@@ -873,6 +889,14 @@ class OperationsSessionsWidget(QWidget):
 
         self.remove_locomotive_button.clicked.connect(
             self.remove_locomotive
+        )
+
+        self.move_locomotive_up_button.clicked.connect(
+            self.move_locomotive_up
+        )
+
+        self.move_locomotive_down_button.clicked.connect(
+            self.move_locomotive_down
         )
 
         self.refresh_locomotives_button.clicked.connect(
@@ -1522,6 +1546,194 @@ class OperationsSessionsWidget(QWidget):
 
         return indexes[0].data(
             self.LOCOMOTIVE_ASSIGNMENT_ID_ROLE
+        )
+
+    def select_locomotive_assignment(
+        self,
+        locomotive_assignment_id,
+    ):
+
+        model = self.locomotive_table.model()
+
+        if model is None:
+
+            return
+
+        for row in range(
+            model.rowCount()
+        ):
+
+            index = model.index(
+                row,
+                0,
+            )
+
+            assignment_id = index.data(
+                self.LOCOMOTIVE_ASSIGNMENT_ID_ROLE
+            )
+
+            if assignment_id == locomotive_assignment_id:
+
+                self.locomotive_table.selectRow(
+                    row
+                )
+
+                return
+
+    def move_locomotive_up(
+        self,
+    ):
+
+        operations_session = (
+            self.get_selected_session()
+        )
+
+        if operations_session is None:
+
+            return
+
+        if operations_session.status == "COMPLETED":
+
+            QMessageBox.warning(
+                self,
+                "Move Locomotive",
+                (
+                    "A completed Operations Session "
+                    "cannot be changed."
+                ),
+            )
+
+            return
+
+        if operations_session.status == "CANCELLED":
+
+            QMessageBox.warning(
+                self,
+                "Move Locomotive",
+                (
+                    "A cancelled Operations Session "
+                    "cannot be changed."
+                ),
+            )
+
+            return
+
+        assignment_id = (
+            self.get_selected_train_assignment_id()
+        )
+
+        if assignment_id is None:
+
+            return
+
+        locomotive_assignment_id = (
+            self.get_selected_locomotive_assignment_id()
+        )
+
+        if locomotive_assignment_id is None:
+
+            return
+
+        success, result = (
+            OperationsSessionTrainLocomotiveService.move_up(
+                locomotive_assignment_id
+            )
+        )
+
+        if not success:
+
+            QMessageBox.information(
+                self,
+                "Move Locomotive",
+                str(result),
+            )
+
+            return
+
+        self.load_locomotives_for_train_assignment(
+            assignment_id
+        )
+
+        self.select_locomotive_assignment(
+            locomotive_assignment_id
+        )
+
+    def move_locomotive_down(
+        self,
+    ):
+
+        operations_session = (
+            self.get_selected_session()
+        )
+
+        if operations_session is None:
+
+            return
+
+        if operations_session.status == "COMPLETED":
+
+            QMessageBox.warning(
+                self,
+                "Move Locomotive",
+                (
+                    "A completed Operations Session "
+                    "cannot be changed."
+                ),
+            )
+
+            return
+
+        if operations_session.status == "CANCELLED":
+
+            QMessageBox.warning(
+                self,
+                "Move Locomotive",
+                (
+                    "A cancelled Operations Session "
+                    "cannot be changed."
+                ),
+            )
+
+            return
+
+        assignment_id = (
+            self.get_selected_train_assignment_id()
+        )
+
+        if assignment_id is None:
+
+            return
+
+        locomotive_assignment_id = (
+            self.get_selected_locomotive_assignment_id()
+        )
+
+        if locomotive_assignment_id is None:
+
+            return
+
+        success, result = (
+            OperationsSessionTrainLocomotiveService.move_down(
+                locomotive_assignment_id
+            )
+        )
+
+        if not success:
+
+            QMessageBox.information(
+                self,
+                "Move Locomotive",
+                str(result),
+            )
+
+            return
+
+        self.load_locomotives_for_train_assignment(
+            assignment_id
+        )
+
+        self.select_locomotive_assignment(
+            locomotive_assignment_id
         )
 
     def remove_locomotive(

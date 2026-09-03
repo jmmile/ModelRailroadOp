@@ -189,16 +189,6 @@ class OperationsSessionTrainLocomotiveService:
                     ),
                 )
 
-            #
-            # Check motive type compatibility.
-            #
-            # The first locomotive establishes the
-            # motive type for the consist.
-            #
-            # Additional locomotives must normally
-            # use the same motive type.
-            #
-
             consist_statement = (
                 select(
                     OperationsSessionTrainLocomotive
@@ -305,6 +295,196 @@ class OperationsSessionTrainLocomotiveService:
             return (
                 True,
                 assignment,
+            )
+
+    @staticmethod
+    def move_up(
+        assignment_id,
+    ):
+
+        if assignment_id is None:
+
+            return (
+                False,
+                "No locomotive assignment was specified.",
+            )
+
+        with SessionLocal() as session:
+
+            assignment = session.get(
+                OperationsSessionTrainLocomotive,
+                assignment_id,
+            )
+
+            if assignment is None:
+
+                return (
+                    False,
+                    (
+                        f"Locomotive assignment "
+                        f"{assignment_id} "
+                        "was not found."
+                    ),
+                )
+
+            previous_statement = (
+                select(
+                    OperationsSessionTrainLocomotive
+                )
+                .where(
+                    OperationsSessionTrainLocomotive
+                    .operations_session_train_id
+                    == assignment.operations_session_train_id
+                )
+                .where(
+                    OperationsSessionTrainLocomotive.sequence
+                    < assignment.sequence
+                )
+                .order_by(
+                    OperationsSessionTrainLocomotive.sequence.desc(),
+                    OperationsSessionTrainLocomotive.id.desc(),
+                )
+            )
+
+            previous_assignment = (
+                session.execute(
+                    previous_statement
+                )
+                .scalars()
+                .first()
+            )
+
+            if previous_assignment is None:
+
+                return (
+                    False,
+                    "The locomotive is already first in the consist.",
+                )
+
+            current_sequence = assignment.sequence
+
+            previous_sequence = (
+                previous_assignment.sequence
+            )
+
+            temporary_sequence = (
+                -assignment.id
+            )
+
+            assignment.sequence = temporary_sequence
+
+            session.flush()
+
+            previous_assignment.sequence = (
+                current_sequence
+            )
+
+            session.flush()
+
+            assignment.sequence = (
+                previous_sequence
+            )
+
+            session.commit()
+
+            return (
+                True,
+                "Locomotive moved up successfully.",
+            )
+
+    @staticmethod
+    def move_down(
+        assignment_id,
+    ):
+
+        if assignment_id is None:
+
+            return (
+                False,
+                "No locomotive assignment was specified.",
+            )
+
+        with SessionLocal() as session:
+
+            assignment = session.get(
+                OperationsSessionTrainLocomotive,
+                assignment_id,
+            )
+
+            if assignment is None:
+
+                return (
+                    False,
+                    (
+                        f"Locomotive assignment "
+                        f"{assignment_id} "
+                        "was not found."
+                    ),
+                )
+
+            next_statement = (
+                select(
+                    OperationsSessionTrainLocomotive
+                )
+                .where(
+                    OperationsSessionTrainLocomotive
+                    .operations_session_train_id
+                    == assignment.operations_session_train_id
+                )
+                .where(
+                    OperationsSessionTrainLocomotive.sequence
+                    > assignment.sequence
+                )
+                .order_by(
+                    OperationsSessionTrainLocomotive.sequence,
+                    OperationsSessionTrainLocomotive.id,
+                )
+            )
+
+            next_assignment = (
+                session.execute(
+                    next_statement
+                )
+                .scalars()
+                .first()
+            )
+
+            if next_assignment is None:
+
+                return (
+                    False,
+                    "The locomotive is already last in the consist.",
+                )
+
+            current_sequence = assignment.sequence
+
+            next_sequence = (
+                next_assignment.sequence
+            )
+
+            temporary_sequence = (
+                -assignment.id
+            )
+
+            assignment.sequence = temporary_sequence
+
+            session.flush()
+
+            next_assignment.sequence = (
+                current_sequence
+            )
+
+            session.flush()
+
+            assignment.sequence = (
+                next_sequence
+            )
+
+            session.commit()
+
+            return (
+                True,
+                "Locomotive moved down successfully.",
             )
 
     @staticmethod
