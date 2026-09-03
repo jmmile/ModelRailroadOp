@@ -1,6 +1,3 @@
-# Operations Sessions Widget
-
-
 from PySide6.QtCore import (
     Qt,
 )
@@ -40,12 +37,20 @@ from modelrailroadops.services.car_move_service import (
     CarMoveService,
 )
 
+from modelrailroadops.services.locomotive_service import (
+    LocomotiveService,
+)
+
 from modelrailroadops.services.operations_session_service import (
     OperationsSessionService,
 )
 
 from modelrailroadops.services.operations_session_train_service import (
     OperationsSessionTrainService,
+)
+
+from modelrailroadops.services.operations_session_train_locomotive_service import (
+    OperationsSessionTrainLocomotiveService,
 )
 
 from modelrailroadops.services.train_route_service import (
@@ -198,10 +203,148 @@ class AssignTrainDialog(QDialog):
         return self.train_combo.currentData()
 
 
+class AssignLocomotiveDialog(QDialog):
+    """
+    Dialog used to assign a locomotive to a
+    Train within an Operations Session.
+    """
+
+    def __init__(
+        self,
+        operations_session_train_id,
+        parent=None,
+    ):
+
+        super().__init__(
+            parent
+        )
+
+        self.operations_session_train_id = (
+            operations_session_train_id
+        )
+
+        self.setWindowTitle(
+            "Assign Locomotive"
+        )
+
+        self.setModal(
+            True
+        )
+
+        self.resize(
+            525,
+            150,
+        )
+
+        layout = QVBoxLayout(
+            self
+        )
+
+        form_layout = QFormLayout()
+
+        self.locomotive_combo = QComboBox()
+
+        self.load_locomotives()
+
+        form_layout.addRow(
+            "Locomotive:",
+            self.locomotive_combo,
+        )
+
+        layout.addLayout(
+            form_layout
+        )
+
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.Ok
+            | QDialogButtonBox.Cancel
+        )
+
+        button_box.accepted.connect(
+            self.accept
+        )
+
+        button_box.rejected.connect(
+            self.reject
+        )
+
+        layout.addWidget(
+            button_box
+        )
+
+    def load_locomotives(
+        self,
+    ):
+
+        existing_assignments = (
+            OperationsSessionTrainLocomotiveService
+            .get_by_operations_session_train(
+                self.operations_session_train_id
+            )
+        )
+
+        assigned_locomotive_ids = {
+            assignment.locomotive_id
+            for assignment in existing_assignments
+        }
+
+        locomotives = (
+            LocomotiveService.get_all()
+        )
+
+        for locomotive in locomotives:
+
+            if locomotive.id in assigned_locomotive_ids:
+
+                continue
+
+            display_parts = [
+                (
+                    f"{locomotive.reporting_mark} "
+                    f"{locomotive.number}"
+                )
+            ]
+
+            if locomotive.model:
+
+                display_parts.append(
+                    locomotive.model
+                )
+
+            if locomotive.locomotive_type:
+
+                display_parts.append(
+                    locomotive.locomotive_type
+                )
+
+            if locomotive.horsepower is not None:
+
+                display_parts.append(
+                    f"{locomotive.horsepower} HP"
+                )
+
+            display = " - ".join(
+                display_parts
+            )
+
+            self.locomotive_combo.addItem(
+                display,
+                locomotive.id,
+            )
+
+    def get_locomotive_id(
+        self,
+    ):
+
+        return self.locomotive_combo.currentData()
+
+
 class OperationsSessionsWidget(QWidget):
 
     ASSIGNMENT_ID_ROLE = 32
     TRAIN_ID_ROLE = 33
+    LOCOMOTIVE_ASSIGNMENT_ID_ROLE = 34
+    LOCOMOTIVE_ID_ROLE = 35
 
     def __init__(
         self,
@@ -395,6 +538,88 @@ class OperationsSessionsWidget(QWidget):
         layout.addWidget(
             self.train_table
         )
+
+        #
+        # Motive Power
+        #
+
+        self.locomotives_label = QLabel(
+            "Motive Power - Select an assigned train"
+        )
+
+        layout.addWidget(
+            self.locomotives_label
+        )
+
+        locomotive_button_layout = QHBoxLayout()
+
+        self.add_locomotive_button = QPushButton(
+            "Add Locomotive"
+        )
+
+        self.remove_locomotive_button = QPushButton(
+            "Remove Locomotive"
+        )
+
+        self.refresh_locomotives_button = QPushButton(
+            "Refresh Motive Power"
+        )
+
+        locomotive_button_layout.addWidget(
+            self.add_locomotive_button
+        )
+
+        locomotive_button_layout.addWidget(
+            self.remove_locomotive_button
+        )
+
+        locomotive_button_layout.addWidget(
+            self.refresh_locomotives_button
+        )
+
+        locomotive_button_layout.addStretch()
+
+        layout.addLayout(
+            locomotive_button_layout
+        )
+
+        self.locomotive_table = QTableView()
+
+        self.locomotive_table.setStyleSheet(
+            TABLE_SELECTION_STYLE
+        )
+
+        self.locomotive_table.setSelectionBehavior(
+            QAbstractItemView.SelectRows
+        )
+
+        self.locomotive_table.setSelectionMode(
+            QAbstractItemView.SingleSelection
+        )
+
+        self.locomotive_table.setAlternatingRowColors(
+            True
+        )
+
+        self.locomotive_table.setEditTriggers(
+            QAbstractItemView.NoEditTriggers
+        )
+
+        self.locomotive_table.verticalHeader().setVisible(
+            False
+        )
+
+        layout.addWidget(
+            self.locomotive_table
+        )
+
+        self.locomotive_table_model_data = []
+
+        self.update_locomotive_table()
+
+        #
+        # Route
+        #
 
         self.route_label = QLabel(
             "Route - Select an assigned train"
@@ -642,6 +867,18 @@ class OperationsSessionsWidget(QWidget):
             self.refresh_trains
         )
 
+        self.add_locomotive_button.clicked.connect(
+            self.add_locomotive
+        )
+
+        self.remove_locomotive_button.clicked.connect(
+            self.remove_locomotive
+        )
+
+        self.refresh_locomotives_button.clicked.connect(
+            self.refresh_locomotives
+        )
+
         self.generate_car_moves_button.clicked.connect(
             self.generate_car_moves
         )
@@ -661,17 +898,6 @@ class OperationsSessionsWidget(QWidget):
         self.table.selectionModel().selectionChanged.connect(
             self.session_selection_changed
         )
-
-        #
-        # IMPORTANT:
-        #
-        # Do NOT connect train_table.selectionModel()
-        # here because train_table does not have a model
-        # yet. The model is assigned in update_train_table().
-        #
-        # The selectionChanged signal is connected there,
-        # after setModel().
-        #
 
         self.waybill_table.doubleClicked.connect(
             self.preview_waybill
@@ -723,9 +949,7 @@ class OperationsSessionsWidget(QWidget):
         else:
 
             self.clear_trains()
-
             self.clear_waybills()
-
             self.clear_car_moves()
 
     def session_selection_changed(
@@ -742,9 +966,7 @@ class OperationsSessionsWidget(QWidget):
         if not indexes:
 
             self.clear_trains()
-
             self.clear_waybills()
-
             self.clear_car_moves()
 
             return
@@ -823,6 +1045,7 @@ class OperationsSessionsWidget(QWidget):
         self.update_train_table()
 
         self.clear_route()
+        self.clear_locomotives()
 
     def get_train(
         self,
@@ -912,11 +1135,6 @@ class OperationsSessionsWidget(QWidget):
             True
         )
 
-        #
-        # The train table model now exists, so its
-        # selection model also exists.
-        #
-
         self.train_table.selectionModel().selectionChanged.connect(
             self.train_selection_changed
         )
@@ -931,9 +1149,14 @@ class OperationsSessionsWidget(QWidget):
             self.get_selected_train_id()
         )
 
+        assignment_id = (
+            self.get_selected_train_assignment_id_without_message()
+        )
+
         if train_id is None:
 
             self.clear_route()
+            self.clear_locomotives()
 
             return
 
@@ -941,13 +1164,24 @@ class OperationsSessionsWidget(QWidget):
             train_id
         )
 
+        self.load_locomotives_for_train_assignment(
+            assignment_id
+        )
+
     def get_selected_train_id(
         self,
     ):
 
-        indexes = (
+        selection_model = (
             self.train_table.selectionModel()
-            .selectedRows()
+        )
+
+        if selection_model is None:
+
+            return None
+
+        indexes = (
+            selection_model.selectedRows()
         )
 
         if not indexes:
@@ -957,6 +1191,432 @@ class OperationsSessionsWidget(QWidget):
         return indexes[0].data(
             self.TRAIN_ID_ROLE
         )
+
+    def get_selected_train_assignment_id_without_message(
+        self,
+    ):
+
+        selection_model = (
+            self.train_table.selectionModel()
+        )
+
+        if selection_model is None:
+
+            return None
+
+        indexes = (
+            selection_model.selectedRows()
+        )
+
+        if not indexes:
+
+            return None
+
+        return indexes[0].data(
+            self.ASSIGNMENT_ID_ROLE
+        )
+
+    #
+    # Motive Power
+    #
+
+    def load_locomotives_for_train_assignment(
+        self,
+        assignment_id,
+    ):
+
+        if assignment_id is None:
+
+            self.clear_locomotives()
+
+            return
+
+        assignments = (
+            OperationsSessionTrainLocomotiveService
+            .get_by_operations_session_train(
+                assignment_id
+            )
+        )
+
+        self.locomotive_table_model_data = []
+
+        for assignment in assignments:
+
+            locomotive = assignment.locomotive
+
+            if locomotive is None:
+
+                continue
+
+            self.locomotive_table_model_data.append(
+                (
+                    assignment.id,
+                    locomotive.id,
+                    assignment.sequence,
+                    locomotive.reporting_mark,
+                    locomotive.number,
+                    locomotive.model,
+                    locomotive.locomotive_type,
+                    locomotive.horsepower,
+                )
+            )
+
+        self.update_locomotive_table()
+
+        train_id = (
+            self.get_selected_train_id()
+        )
+
+        train = self.get_train(
+            train_id
+        )
+
+        if train is None:
+
+            self.locomotives_label.setText(
+                "Motive Power - Select an assigned train"
+            )
+
+            return
+
+        self.locomotives_label.setText(
+            (
+                f"Motive Power - "
+                f"{train.symbol or ''} - "
+                f"{train.name or ''}"
+            )
+        )
+
+    def update_locomotive_table(
+        self,
+    ):
+
+        model = QStandardItemModel(
+            self
+        )
+
+        model.setHorizontalHeaderLabels(
+            [
+                "Seq",
+                "Reporting Mark",
+                "Number",
+                "Model",
+                "Type",
+                "Horsepower",
+            ]
+        )
+
+        for (
+            assignment_id,
+            locomotive_id,
+            sequence,
+            reporting_mark,
+            number,
+            model_name,
+            locomotive_type,
+            horsepower,
+        ) in self.locomotive_table_model_data:
+
+            items = [
+                QStandardItem(
+                    str(sequence)
+                ),
+                QStandardItem(
+                    reporting_mark or ""
+                ),
+                QStandardItem(
+                    number or ""
+                ),
+                QStandardItem(
+                    model_name or ""
+                ),
+                QStandardItem(
+                    locomotive_type or ""
+                ),
+                QStandardItem(
+                    (
+                        str(horsepower)
+                        if horsepower is not None
+                        else ""
+                    )
+                ),
+            ]
+
+            items[0].setData(
+                assignment_id,
+                self.LOCOMOTIVE_ASSIGNMENT_ID_ROLE,
+            )
+
+            items[0].setData(
+                locomotive_id,
+                self.LOCOMOTIVE_ID_ROLE,
+            )
+
+            model.appendRow(
+                items
+            )
+
+        self.locomotive_table.setModel(
+            model
+        )
+
+        self.locomotive_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeToContents
+        )
+
+        self.locomotive_table.horizontalHeader().setStretchLastSection(
+            True
+        )
+
+    def clear_locomotives(
+        self,
+    ):
+
+        self.locomotive_table_model_data = []
+
+        self.update_locomotive_table()
+
+        self.locomotives_label.setText(
+            "Motive Power - Select an assigned train"
+        )
+
+    def refresh_locomotives(
+        self,
+    ):
+
+        assignment_id = (
+            self.get_selected_train_assignment_id_without_message()
+        )
+
+        if assignment_id is None:
+
+            self.clear_locomotives()
+
+            return
+
+        self.load_locomotives_for_train_assignment(
+            assignment_id
+        )
+
+    def add_locomotive(
+        self,
+    ):
+
+        operations_session = (
+            self.get_selected_session()
+        )
+
+        if operations_session is None:
+
+            return
+
+        if operations_session.status == "COMPLETED":
+
+            QMessageBox.warning(
+                self,
+                "Assign Locomotive",
+                (
+                    "A completed Operations Session "
+                    "cannot be changed."
+                ),
+            )
+
+            return
+
+        if operations_session.status == "CANCELLED":
+
+            QMessageBox.warning(
+                self,
+                "Assign Locomotive",
+                (
+                    "A cancelled Operations Session "
+                    "cannot be changed."
+                ),
+            )
+
+            return
+
+        assignment_id = (
+            self.get_selected_train_assignment_id()
+        )
+
+        if assignment_id is None:
+
+            return
+
+        dialog = AssignLocomotiveDialog(
+            assignment_id,
+            self,
+        )
+
+        if (
+            dialog.exec()
+            != QDialog.Accepted
+        ):
+
+            return
+
+        locomotive_id = (
+            dialog.get_locomotive_id()
+        )
+
+        if locomotive_id is None:
+
+            QMessageBox.warning(
+                self,
+                "Assign Locomotive",
+                (
+                    "There are no available locomotives "
+                    "to assign."
+                ),
+            )
+
+            return
+
+        success, result = (
+            OperationsSessionTrainLocomotiveService.create(
+                assignment_id,
+                locomotive_id,
+            )
+        )
+
+        if not success:
+
+            QMessageBox.warning(
+                self,
+                "Assign Locomotive",
+                str(result),
+            )
+
+            return
+
+        self.load_locomotives_for_train_assignment(
+            assignment_id
+        )
+
+    def get_selected_locomotive_assignment_id(
+        self,
+    ):
+
+        selection_model = (
+            self.locomotive_table.selectionModel()
+        )
+
+        if selection_model is None:
+
+            return None
+
+        indexes = (
+            selection_model.selectedRows()
+        )
+
+        if not indexes:
+
+            QMessageBox.information(
+                self,
+                "Locomotive Assignment",
+                "Please select a locomotive.",
+            )
+
+            return None
+
+        return indexes[0].data(
+            self.LOCOMOTIVE_ASSIGNMENT_ID_ROLE
+        )
+
+    def remove_locomotive(
+        self,
+    ):
+
+        operations_session = (
+            self.get_selected_session()
+        )
+
+        if operations_session is None:
+
+            return
+
+        if operations_session.status == "COMPLETED":
+
+            QMessageBox.warning(
+                self,
+                "Remove Locomotive",
+                (
+                    "A completed Operations Session "
+                    "cannot be changed."
+                ),
+            )
+
+            return
+
+        if operations_session.status == "CANCELLED":
+
+            QMessageBox.warning(
+                self,
+                "Remove Locomotive",
+                (
+                    "A cancelled Operations Session "
+                    "cannot be changed."
+                ),
+            )
+
+            return
+
+        assignment_id = (
+            self.get_selected_train_assignment_id()
+        )
+
+        if assignment_id is None:
+
+            return
+
+        locomotive_assignment_id = (
+            self.get_selected_locomotive_assignment_id()
+        )
+
+        if locomotive_assignment_id is None:
+
+            return
+
+        answer = QMessageBox.question(
+            self,
+            "Remove Locomotive",
+            (
+                "Remove the selected locomotive "
+                "from this train?"
+            ),
+            QMessageBox.Yes
+            | QMessageBox.No,
+            QMessageBox.No,
+        )
+
+        if answer != QMessageBox.Yes:
+
+            return
+
+        success, result = (
+            OperationsSessionTrainLocomotiveService.delete(
+                locomotive_assignment_id
+            )
+        )
+
+        if not success:
+
+            QMessageBox.warning(
+                self,
+                "Remove Locomotive",
+                str(result),
+            )
+
+            return
+
+        self.load_locomotives_for_train_assignment(
+            assignment_id
+        )
+
+    #
+    # Route
+    #
 
     def load_route_for_train(
         self,
@@ -1031,6 +1691,7 @@ class OperationsSessionsWidget(QWidget):
         self.update_train_table()
 
         self.clear_route()
+        self.clear_locomotives()
 
     def load_waybills_for_session(
         self,
@@ -1363,9 +2024,22 @@ class OperationsSessionsWidget(QWidget):
         self,
     ):
 
-        indexes = (
+        selection_model = (
             self.train_table.selectionModel()
-            .selectedRows()
+        )
+
+        if selection_model is None:
+
+            QMessageBox.information(
+                self,
+                "Train Assignment",
+                "Please select a train assignment.",
+            )
+
+            return None
+
+        indexes = (
+            selection_model.selectedRows()
         )
 
         if not indexes:

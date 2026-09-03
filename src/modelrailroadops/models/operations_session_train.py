@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 from sqlalchemy import (
     ForeignKey,
     Integer,
@@ -11,6 +13,17 @@ from sqlalchemy.orm import (
 )
 
 from modelrailroadops.database.base import Base
+
+if TYPE_CHECKING:
+    from modelrailroadops.models.operations_session import (
+        OperationsSession,
+    )
+    from modelrailroadops.models.operations_session_train_locomotive import (
+        OperationsSessionTrainLocomotive,
+    )
+    from modelrailroadops.models.train import (
+        Train,
+    )
 
 
 class OperationsSessionTrain(
@@ -33,19 +46,11 @@ class OperationsSessionTrain(
         ),
     )
 
-    #
-    # Primary key.
-    #
-
     id: Mapped[int] = mapped_column(
         Integer,
         primary_key=True,
         autoincrement=True,
     )
-
-    #
-    # Operations Session ID.
-    #
 
     operations_session_id: Mapped[int] = mapped_column(
         ForeignKey(
@@ -55,10 +60,6 @@ class OperationsSessionTrain(
         nullable=False,
     )
 
-    #
-    # Train ID.
-    #
-
     train_id: Mapped[int] = mapped_column(
         ForeignKey(
             "trains.id",
@@ -67,10 +68,6 @@ class OperationsSessionTrain(
         nullable=False,
     )
 
-    #
-    # Operations Session relationship.
-    #
-
     operations_session: Mapped[
         "OperationsSession"
     ] = relationship(
@@ -78,13 +75,20 @@ class OperationsSessionTrain(
         back_populates="session_trains",
     )
 
-    #
-    # Train relationship.
-    #
-
     train: Mapped[
         "Train"
     ] = relationship(
         "Train",
         back_populates="operations_sessions",
+    )
+
+    locomotives: Mapped[
+        list["OperationsSessionTrainLocomotive"]
+    ] = relationship(
+        "OperationsSessionTrainLocomotive",
+        back_populates="operations_session_train",
+        cascade="all, delete-orphan",
+        order_by=(
+            "OperationsSessionTrainLocomotive.sequence"
+        ),
     )
