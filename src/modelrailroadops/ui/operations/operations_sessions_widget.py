@@ -629,6 +629,25 @@ class OperationsSessionsWidget(QWidget):
             self.locomotive_table
         )
 
+        self.train_power_summary_label = QLabel(
+            (
+                "Consist Horsepower: 0 HP"
+                "  |  Maximum Cars: 0"
+                "  |  Maximum Train Tonnage: 0.0 tons"
+                "  |  Horsepower/Ton: —"
+            )
+        )
+
+        layout.addWidget(
+            self.train_power_summary_label
+        )
+
+        self.consist_horsepower = 0
+        self.missing_horsepower = 0
+        self.maximum_car_count = 0
+        self.maximum_tonnage = 0.0
+        self.missing_weight_count = 0
+
         self.locomotive_table_model_data = []
 
         self.update_locomotive_table()
@@ -1070,6 +1089,7 @@ class OperationsSessionsWidget(QWidget):
 
         self.clear_route()
         self.clear_locomotives()
+        self.clear_train_weight_summary()
 
     def get_train(
         self,
@@ -1181,6 +1201,7 @@ class OperationsSessionsWidget(QWidget):
 
             self.clear_route()
             self.clear_locomotives()
+            self.clear_train_weight_summary()
 
             return
 
@@ -1191,6 +1212,8 @@ class OperationsSessionsWidget(QWidget):
         self.load_locomotives_for_train_assignment(
             assignment_id
         )
+
+        self.update_train_weight_summary()
 
     def get_selected_train_id(
         self,
@@ -1238,6 +1261,150 @@ class OperationsSessionsWidget(QWidget):
 
         return indexes[0].data(
             self.ASSIGNMENT_ID_ROLE
+        )
+
+    #
+    # Train power summary
+    #
+
+    def update_train_weight_summary(
+        self,
+    ):
+
+        operations_session = (
+            self.get_selected_session_without_message()
+        )
+
+        train_id = (
+            self.get_selected_train_id()
+        )
+
+        if (
+            operations_session is None
+            or train_id is None
+        ):
+
+            self.clear_train_weight_summary()
+
+            return
+
+        summary = (
+            CarMoveService.get_train_weight_summary(
+                operations_session.id,
+                train_id,
+            )
+        )
+
+        self.maximum_car_count = (
+            summary.get(
+                "maximum_car_count",
+                0,
+            )
+        )
+
+        self.maximum_tonnage = (
+            summary.get(
+                "maximum_tonnage",
+                0.0,
+            )
+        )
+
+        self.missing_weight_count = (
+            summary.get(
+                "missing_weight_count",
+                0,
+            )
+        )
+
+        self.update_train_power_summary()
+
+    def clear_train_weight_summary(
+        self,
+    ):
+
+        self.maximum_car_count = 0
+        self.maximum_tonnage = 0.0
+        self.missing_weight_count = 0
+
+        self.update_train_power_summary()
+
+    def update_train_power_summary(
+        self,
+    ):
+
+        horsepower_text = (
+            f"Consist Horsepower: "
+            f"{self.consist_horsepower:,} HP"
+        )
+
+        if self.missing_horsepower:
+
+            locomotive_word = (
+                "locomotive"
+                if self.missing_horsepower == 1
+                else "locomotives"
+            )
+
+            horsepower_text += (
+                f" ({self.missing_horsepower} "
+                f"{locomotive_word} missing horsepower)"
+            )
+
+        car_count_text = (
+            f"Maximum Cars: "
+            f"{self.maximum_car_count}"
+        )
+
+        if self.missing_weight_count:
+
+            car_word = (
+                "car"
+                if self.missing_weight_count == 1
+                else "cars"
+            )
+
+            tonnage_text = (
+                f"Maximum Train Tonnage: "
+                f"at least {self.maximum_tonnage:,.1f} tons "
+                f"({self.missing_weight_count} "
+                f"{car_word} missing weight)"
+            )
+
+        else:
+
+            tonnage_text = (
+                f"Maximum Train Tonnage: "
+                f"{self.maximum_tonnage:,.1f} tons"
+            )
+
+        horsepower_per_ton_text = (
+            "Horsepower/Ton: —"
+        )
+
+        if (
+            self.consist_horsepower > 0
+            and self.maximum_tonnage > 0
+            and self.missing_horsepower == 0
+            and self.missing_weight_count == 0
+        ):
+
+            horsepower_per_ton = (
+                self.consist_horsepower
+                / self.maximum_tonnage
+            )
+
+            horsepower_per_ton_text = (
+                f"Horsepower/Ton: "
+                f"{horsepower_per_ton:,.1f}"
+            )
+
+        self.train_power_summary_label.setText(
+            (
+                f"{horsepower_text}"
+                f"  |  {car_count_text}"
+                f"  |  {tonnage_text}"
+                f"  |  {horsepower_per_ton_text}"
+            )
         )
 
     #
@@ -1391,6 +1558,23 @@ class OperationsSessionsWidget(QWidget):
         self.locomotive_table.horizontalHeader().setStretchLastSection(
             True
         )
+
+        self.consist_horsepower = 0
+        self.missing_horsepower = 0
+
+        for locomotive_data in self.locomotive_table_model_data:
+
+            horsepower = locomotive_data[7]
+
+            if horsepower is None:
+
+                self.missing_horsepower += 1
+
+            else:
+
+                self.consist_horsepower += horsepower
+
+        self.update_train_power_summary()
 
     def clear_locomotives(
         self,
@@ -1904,6 +2088,7 @@ class OperationsSessionsWidget(QWidget):
 
         self.clear_route()
         self.clear_locomotives()
+        self.clear_train_weight_summary()
 
     def load_waybills_for_session(
         self,
@@ -1982,6 +2167,8 @@ class OperationsSessionsWidget(QWidget):
         self.load_car_moves_for_session(
             operations_session
         )
+
+        self.update_train_weight_summary()
 
     def generate_car_moves(
         self,
@@ -2109,6 +2296,8 @@ class OperationsSessionsWidget(QWidget):
             operations_session
         )
 
+        self.update_train_weight_summary()
+
         generated = (
             result.get(
                 "generated",
@@ -2231,6 +2420,8 @@ class OperationsSessionsWidget(QWidget):
         self.load_car_moves_for_session(
             operations_session
         )
+
+        self.update_train_weight_summary()
 
     def get_selected_train_assignment_id(
         self,

@@ -270,6 +270,326 @@ class CarMoveService:
             )
 
     #
+    # Calculate the tonnage of a CarMove.
+    #
+    # Weight comes from:
+    #
+    #     Car.empty_weight_lbs
+    #
+    # plus:
+    #
+    #     Waybill.cargo_weight_lbs
+    #
+    # for loaded cars.
+    #
+
+    @staticmethod
+    def get_move_tonnage(
+        move,
+    ):
+
+        if move is None:
+
+            return None
+
+        car = getattr(
+            move,
+            "car",
+            None,
+        )
+
+        waybill = getattr(
+            move,
+            "waybill",
+            None,
+        )
+
+        if (
+            car is None
+            or waybill is None
+        ):
+
+            return None
+
+        empty_weight_lbs = getattr(
+            car,
+            "empty_weight_lbs",
+            None,
+        )
+
+        if empty_weight_lbs is None:
+
+            return None
+
+        load_state = (
+            getattr(
+                waybill,
+                "load_state",
+                None,
+            )
+            or ""
+        ).strip().upper()
+
+        if load_state == "EMPTY":
+
+            gross_weight_lbs = (
+                empty_weight_lbs
+            )
+
+        elif load_state == "LOADED":
+
+            cargo_weight_lbs = getattr(
+                waybill,
+                "cargo_weight_lbs",
+                None,
+            )
+
+            if cargo_weight_lbs is None:
+
+                return None
+
+            gross_weight_lbs = (
+                empty_weight_lbs
+                + cargo_weight_lbs
+            )
+
+        else:
+
+            return None
+
+        return (
+            gross_weight_lbs
+            / 2000.0
+        )
+
+    #
+    # Calculate the maximum train size and tonnage
+    # encountered while operating a Train during an
+    # Operations Session.
+    #
+    # At each route sequence:
+    #
+    #     SETOUT moves are processed first.
+    #     PICKUP moves are processed second.
+    #
+    # This represents the consist departing each stop
+    # after switching has been completed.
+    #
+    # The returned maximum tonnage includes only cars
+    # whose weight can be calculated. Cars with missing
+    # weight information are counted separately.
+    #
+
+    @staticmethod
+    def get_train_weight_summary(
+        operations_session_id,
+        train_id,
+    ):
+
+        if (
+            operations_session_id is None
+            or train_id is None
+        ):
+
+            return {
+                "maximum_car_count": 0,
+                "maximum_tonnage": 0.0,
+                "missing_weight_count": 0,
+            }
+
+        moves = (
+            CarMoveService.get_by_operations_session_and_train(
+                operations_session_id,
+                train_id,
+            )
+        )
+
+        if not moves:
+
+            return {
+                "maximum_car_count": 0,
+                "maximum_tonnage": 0.0,
+                "missing_weight_count": 0,
+            }
+
+        #
+        # Sort moves explicitly so SETOUT moves occur before
+        # PICKUP moves at the same route sequence.
+        #
+
+        def move_sort_key(move):
+
+            route_sequence = getattr(
+                move,
+                "route_sequence",
+                None,
+            )
+
+            if route_sequence is None:
+
+                route_sequence = 0
+
+            move_type = (
+                getattr(
+                    move,
+                    "move_type",
+                    "",
+                )
+                or ""
+            ).strip().upper()
+
+            move_type_order = (
+                0
+                if move_type == "SETOUT"
+                else 1
+            )
+
+            return (
+                route_sequence,
+                move_type_order,
+                move.id,
+            )
+
+        ordered_moves = sorted(
+            moves,
+            key=move_sort_key,
+        )
+
+        active_cars = {}
+
+        maximum_car_count = 0
+        maximum_tonnage = 0.0
+
+        missing_weight_car_ids = set()
+
+        current_route_sequence = None
+
+        for move in ordered_moves:
+
+            route_sequence = getattr(
+                move,
+                "route_sequence",
+                None,
+            )
+
+            #
+            # When moving to the next route sequence,
+            # record the departing consist from the
+            # previous stop.
+            #
+
+            if (
+                current_route_sequence is not None
+                and route_sequence
+                != current_route_sequence
+            ):
+
+                current_car_count = len(
+                    active_cars
+                )
+
+                current_tonnage = sum(
+                    tonnage
+                    for tonnage in active_cars.values()
+                    if tonnage is not None
+                )
+
+                maximum_car_count = max(
+                    maximum_car_count,
+                    current_car_count,
+                )
+
+                maximum_tonnage = max(
+                    maximum_tonnage,
+                    current_tonnage,
+                )
+
+            current_route_sequence = (
+                route_sequence
+            )
+
+            move_type = (
+                getattr(
+                    move,
+                    "move_type",
+                    "",
+                )
+                or ""
+            ).strip().upper()
+
+            car_id = getattr(
+                move,
+                "car_id",
+                None,
+            )
+
+            if car_id is None:
+
+                continue
+
+            if move_type == "SETOUT":
+
+                active_cars.pop(
+                    car_id,
+                    None,
+                )
+
+            elif move_type == "PICKUP":
+
+                tonnage = (
+                    CarMoveService.get_move_tonnage(
+                        move
+                    )
+                )
+
+                active_cars[car_id] = (
+                    tonnage
+                )
+
+                if tonnage is None:
+
+                    missing_weight_car_ids.add(
+                        car_id
+                    )
+
+        #
+        # Record the consist departing the final
+        # route sequence.
+        #
+
+        current_car_count = len(
+            active_cars
+        )
+
+        current_tonnage = sum(
+            tonnage
+            for tonnage in active_cars.values()
+            if tonnage is not None
+        )
+
+        maximum_car_count = max(
+            maximum_car_count,
+            current_car_count,
+        )
+
+        maximum_tonnage = max(
+            maximum_tonnage,
+            current_tonnage,
+        )
+
+        return {
+            "maximum_car_count": (
+                maximum_car_count
+            ),
+            "maximum_tonnage": (
+                maximum_tonnage
+            ),
+            "missing_weight_count": len(
+                missing_weight_car_ids
+            ),
+        }
+
+    #
     # Get pending moves for an Operations Session.
     #
 
@@ -532,9 +852,6 @@ class CarMoveService:
             #
             # A SETOUT cannot be completed until the
             # corresponding PICKUP has been completed.
-            #
-            # This prevents the operator from setting out
-            # a car that has not yet been picked up.
             #
 
             if move.move_type == "SETOUT":
