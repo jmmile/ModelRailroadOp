@@ -51,6 +51,10 @@ from modelrailroadops.ui.widgets.locations_widget import (
     LocationsWidget,
 )
 
+from modelrailroadops.ui.locomotives.locomotives_widget import (
+    LocomotivesWidget,
+)
+
 
 class MainWindow(QMainWindow):
     """
@@ -93,6 +97,19 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(
             self.roster_tab,
             "Car Roster",
+        )
+
+        #
+        # Motive Power
+        #
+
+        self.locomotives_widget = (
+            LocomotivesWidget()
+        )
+
+        self.tabs.addTab(
+            self.locomotives_widget,
+            "Motive Power",
         )
 
         #
@@ -301,6 +318,14 @@ class MainWindow(QMainWindow):
         if widget is self.roster_tab:
 
             self.roster_tab.refresh()
+
+        #
+        # Motive Power
+        #
+
+        elif widget is self.locomotives_widget:
+
+            self.locomotives_widget.refresh()
 
         #
         # Industries
