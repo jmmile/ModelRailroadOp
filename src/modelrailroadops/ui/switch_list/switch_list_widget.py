@@ -18,12 +18,17 @@ from PySide6.QtWidgets import (
 from sqlalchemy import select
 
 from modelrailroadops.database.database import SessionLocal
+
 from modelrailroadops.models.operations_session import (
     OperationsSession,
 )
 
 from modelrailroadops.services.switch_list_move_service import (
     SwitchListMoveService,
+)
+
+from modelrailroadops.services.switch_list_service import (
+    SwitchListService,
 )
 
 from modelrailroadops.ui.models.switch_list_table_model import (
@@ -41,21 +46,25 @@ from modelrailroadops.ui.switch_list.switch_list_preview_dialog import (
 
 class SwitchListWidget(QWidget):
     """
-    Displays the switch list for a selected
-    Operations Session.
+    Displays operator-facing switch-list instructions for a
+    selected Operations Session.
 
-    The widget loads active and in-progress Waybills
-    assigned to the selected Operations Session.
+    Each displayed row represents one generated CarMove:
 
-    The user can preview, print, and complete
-    switch-list moves.
+        PICKUP
+        SETOUT
+
+    The switch list may display all Trains in the Operations
+    Session or be filtered to one selected Train.
+
+    The user can preview, print, and complete individual
+    switch-list instructions.
     """
 
     def __init__(
         self,
         parent=None,
     ):
-
         super().__init__(
             parent
         )
@@ -155,11 +164,58 @@ class SwitchListWidget(QWidget):
         )
 
         #
+        # Train filter controls
+        #
+
+        train_layout = QHBoxLayout()
+
+        train_layout.addWidget(
+            QLabel(
+                "Train:"
+            )
+        )
+
+        self.train_combo = QComboBox()
+
+        self.train_combo.setMinimumWidth(
+            300
+        )
+
+        self.train_combo.setEnabled(
+            False
+        )
+
+        self.train_combo.addItem(
+            "All Trains",
+            None,
+        )
+
+        train_layout.addWidget(
+            self.train_combo
+        )
+
+        train_layout.addStretch()
+
+        layout.addLayout(
+            train_layout
+        )
+
+        #
         # Status
         #
 
         self.status_label = QLabel(
-            "Select an Operations Session."
+            "Switch List Status: Select an Operations Session."
+        )
+
+        status_font = self.status_label.font()
+
+        status_font.setBold(
+            True
+        )
+
+        self.status_label.setFont(
+            status_font
         )
 
         layout.addWidget(
@@ -250,6 +306,10 @@ class SwitchListWidget(QWidget):
             self.session_changed
         )
 
+        self.train_combo.currentIndexChanged.connect(
+            self.train_changed
+        )
+
         self.table.selectionModel().selectionChanged.connect(
             self.selection_changed
         )
@@ -261,13 +321,44 @@ class SwitchListWidget(QWidget):
         self.load_operations_sessions()
 
     #
+    # Format Operations Session display name
+    #
+
+    @staticmethod
+    def get_operations_session_display_name(
+        operations_session,
+    ):
+        if operations_session is None:
+            return ""
+
+        name = (
+            operations_session.name
+            or "Operations Session"
+        )
+
+        session_date = (
+            operations_session.session_date
+        )
+
+        if session_date is not None:
+            return (
+                f"#{operations_session.id} - "
+                f"{name} "
+                f"({session_date})"
+            )
+
+        return (
+            f"#{operations_session.id} - "
+            f"{name}"
+        )
+
+    #
     # Load Operations Sessions
     #
 
     def load_operations_sessions(
         self,
     ):
-
         current_id = (
             self.session_combo.currentData()
         )
@@ -284,7 +375,6 @@ class SwitchListWidget(QWidget):
         )
 
         with SessionLocal() as session:
-
             statement = (
                 select(
                     OperationsSession
@@ -304,18 +394,10 @@ class SwitchListWidget(QWidget):
             )
 
             for operations_session in sessions:
-
-                name = (
-                    operations_session.name
-                    or (
-                        f"Session "
-                        f"{operations_session.id}"
-                    )
-                )
-
                 display_name = (
-                    f"{name} "
-                    f"({operations_session.session_date})"
+                    self.get_operations_session_display_name(
+                        operations_session
+                    )
                 )
 
                 self.session_combo.addItem(
@@ -324,7 +406,6 @@ class SwitchListWidget(QWidget):
                 )
 
         if current_id is not None:
-
             index = (
                 self.session_combo.findData(
                     current_id
@@ -332,7 +413,6 @@ class SwitchListWidget(QWidget):
             )
 
             if index >= 0:
-
                 self.session_combo.setCurrentIndex(
                     index
                 )
@@ -341,32 +421,61 @@ class SwitchListWidget(QWidget):
             False
         )
 
-        #
-        # If there was no previously selected
-        # session, leave the table empty.
-        #
-
         if current_id is None:
-
-            self.model.set_operations_session(
-                None
-            )
-
-            self.preview_button.setEnabled(
-                False
-            )
-
-            self.complete_move_button.setEnabled(
-                False
-            )
-
-            self.status_label.setText(
-                "Select an Operations Session."
-            )
+            self.clear_switch_list()
 
         else:
-
             self.load_switch_list()
+
+    #
+    # Clear Switch List
+    #
+
+    def clear_switch_list(
+        self,
+    ):
+        self.model.set_train(
+            None
+        )
+
+        self.model.set_operations_session(
+            None
+        )
+
+        self.train_combo.blockSignals(
+            True
+        )
+
+        self.train_combo.clear()
+
+        self.train_combo.addItem(
+            "All Trains",
+            None,
+        )
+
+        self.train_combo.setCurrentIndex(
+            0
+        )
+
+        self.train_combo.setEnabled(
+            False
+        )
+
+        self.train_combo.blockSignals(
+            False
+        )
+
+        self.preview_button.setEnabled(
+            False
+        )
+
+        self.complete_move_button.setEnabled(
+            False
+        )
+
+        self.status_label.setText(
+            "Switch List Status: Select an Operations Session."
+        )
 
     #
     # Operations Session changed
@@ -376,32 +485,215 @@ class SwitchListWidget(QWidget):
         self,
         index,
     ):
+        operations_session_id = (
+            self.session_combo.itemData(
+                index
+            )
+        )
+
+        if operations_session_id is None:
+            self.clear_switch_list()
+            return
+
+        self.load_train_options(
+            operations_session_id,
+            selected_train_id=None,
+        )
+
+        self.load_switch_list()
+
+    #
+    # Load Train options
+    #
+
+    def load_train_options(
+        self,
+        operations_session_id,
+        selected_train_id=None,
+    ):
+        """
+        Populate the Train selector from the generated
+        CarMoves in the selected Operations Session.
+
+        Only Trains that currently have active switch-list
+        instructions are displayed.
+        """
+
+        self.train_combo.blockSignals(
+            True
+        )
+
+        self.train_combo.clear()
+
+        self.train_combo.addItem(
+            "All Trains",
+            None,
+        )
+
+        if operations_session_id is None:
+            self.train_combo.setEnabled(
+                False
+            )
+
+            self.train_combo.blockSignals(
+                False
+            )
+
+            return
+
+        rows = (
+            SwitchListService.get_switch_list_rows(
+                operations_session_id
+            )
+        )
+
+        trains = {}
+
+        for row in rows:
+            train_id = row.get(
+                "train_id"
+            )
+
+            train_name = (
+                row.get(
+                    "train",
+                    "",
+                )
+                or ""
+            )
+
+            if train_id is None:
+                continue
+
+            if train_id not in trains:
+                trains[
+                    train_id
+                ] = (
+                    train_name
+                    or f"Train {train_id}"
+                )
+
+        sorted_trains = sorted(
+            trains.items(),
+            key=lambda item: (
+                item[1].casefold(),
+                item[0],
+            ),
+        )
+
+        for train_id, train_name in sorted_trains:
+            self.train_combo.addItem(
+                train_name,
+                train_id,
+            )
+
+        self.train_combo.setEnabled(
+            True
+        )
+
+        if selected_train_id is not None:
+            train_index = (
+                self.train_combo.findData(
+                    selected_train_id
+                )
+            )
+
+            if train_index >= 0:
+                self.train_combo.setCurrentIndex(
+                    train_index
+                )
+
+            else:
+                self.train_combo.setCurrentIndex(
+                    0
+                )
+
+        else:
+            self.train_combo.setCurrentIndex(
+                0
+            )
+
+        self.train_combo.blockSignals(
+            False
+        )
+
+    #
+    # Train changed
+    #
+
+    def train_changed(
+        self,
+        index,
+    ):
+        """
+        Apply the Train selected in the Train combo box
+        directly to the switch-list table model.
+        """
 
         operations_session_id = (
             self.session_combo.currentData()
         )
 
         if operations_session_id is None:
+            return
 
-            self.model.set_operations_session(
-                None
+        train_id = (
+            self.train_combo.itemData(
+                index
+            )
+        )
+
+        self.model.set_train(
+            train_id
+        )
+
+        self.table.sortByColumn(
+            1,
+            Qt.AscendingOrder,
+        )
+
+        self.table.horizontalHeader().setSortIndicator(
+            1,
+            Qt.AscendingOrder,
+        )
+
+        self.table.resizeColumnsToContents()
+
+        self.table.clearSelection()
+
+        self.complete_move_button.setEnabled(
+            False
+        )
+
+        self.update_status(
+            train_id
+        )
+
+    #
+    # Update status
+    #
+
+    def update_status(
+        self,
+        train_id,
+    ):
+        count = (
+            self.model.rowCount()
+        )
+
+        if train_id is None:
+            self.status_label.setText(
+                f"Switch List Status: {count} moves — All Trains"
             )
 
-            self.preview_button.setEnabled(
-                False
-            )
-
-            self.complete_move_button.setEnabled(
-                False
+        else:
+            train_name = (
+                self.train_combo.currentText()
             )
 
             self.status_label.setText(
-                "Select an Operations Session."
+                f"Switch List Status: {count} moves — {train_name}"
             )
-
-            return
-
-        self.load_switch_list()
 
     #
     # Load Switch List
@@ -410,55 +702,45 @@ class SwitchListWidget(QWidget):
     def load_switch_list(
         self,
     ):
-
         operations_session_id = (
             self.session_combo.currentData()
         )
 
         if operations_session_id is None:
-
-            self.model.set_operations_session(
-                None
-            )
-
-            self.preview_button.setEnabled(
-                False
-            )
-
-            self.complete_move_button.setEnabled(
-                False
-            )
-
-            self.status_label.setText(
-                "Select an Operations Session."
-            )
-
+            self.clear_switch_list()
             return
+
+        train_index = (
+            self.train_combo.currentIndex()
+        )
+
+        train_id = (
+            self.train_combo.itemData(
+                train_index
+            )
+        )
+
+        self.model.train_id = (
+            train_id
+        )
 
         self.model.set_operations_session(
             operations_session_id
         )
 
-        #
-        # Start the table sorted by the route sequence
-        # where the train will set out each car.
-        #
-
         self.table.sortByColumn(
-            2,
+            1,
             Qt.AscendingOrder,
         )
 
         self.table.horizontalHeader().setSortIndicator(
-            2,
+            1,
             Qt.AscendingOrder,
         )
 
         self.table.resizeColumnsToContents()
 
-        count = (
-            self.model.rowCount()
-        )
+        self.table.clearSelection()
 
         self.preview_button.setEnabled(
             True
@@ -468,8 +750,8 @@ class SwitchListWidget(QWidget):
             False
         )
 
-        self.status_label.setText(
-            f"{count} switch list moves"
+        self.update_status(
+            train_id
         )
 
     #
@@ -481,37 +763,53 @@ class SwitchListWidget(QWidget):
         selected,
         deselected,
     ):
-
-        has_selection = (
-            self.table.currentIndex().isValid()
-        )
-
-        has_rows = (
-            self.model.rowCount() > 0
-        )
-
-        self.complete_move_button.setEnabled(
-            has_selection
-            and has_rows
-        )
-
-    #
-    # Get selected Waybill ID
-    #
-
-    def get_selected_waybill_id(
-        self,
-    ):
-
         index = (
             self.table.currentIndex()
         )
 
         if not index.isValid():
+            self.complete_move_button.setEnabled(
+                False
+            )
+            return
 
+        row = self.model.get_row(
+            index.row()
+        )
+
+        if row is None:
+            self.complete_move_button.setEnabled(
+                False
+            )
+            return
+
+        move_status = (
+            row.get(
+                "move_status",
+                "",
+            )
+            or ""
+        )
+
+        self.complete_move_button.setEnabled(
+            move_status == "PENDING"
+        )
+
+    #
+    # Get selected CarMove ID
+    #
+
+    def get_selected_car_move_id(
+        self,
+    ):
+        index = (
+            self.table.currentIndex()
+        )
+
+        if not index.isValid():
             return None
 
-        return self.model.get_waybill_id(
+        return self.model.get_car_move_id(
             index.row()
         )
 
@@ -522,13 +820,11 @@ class SwitchListWidget(QWidget):
     def complete_selected_move(
         self,
     ):
-
-        waybill_id = (
-            self.get_selected_waybill_id()
+        car_move_id = (
+            self.get_selected_car_move_id()
         )
 
-        if waybill_id is None:
-
+        if car_move_id is None:
             QMessageBox.warning(
                 self,
                 "No Move Selected",
@@ -537,41 +833,62 @@ class SwitchListWidget(QWidget):
 
             return
 
-        #
-        # Validate the move before asking
-        # the user for confirmation.
-        #
-
-        can_complete, message = (
-            SwitchListMoveService.can_complete_move(
-                waybill_id
-            )
-        )
-
-        if not can_complete:
-
-            QMessageBox.warning(
-                self,
-                "Move Cannot Be Completed",
-                message,
-            )
-
-            return
-
-        #
-        # Get selected row information for
-        # the confirmation message.
-        #
-
         index = (
             self.table.currentIndex()
         )
+
+        if not index.isValid():
+            return
 
         row = self.model.get_row(
             index.row()
         )
 
         if row is None:
+            return
+
+        move_type = (
+            row.get(
+                "move_type",
+                "",
+            )
+            or ""
+        )
+
+        move_status = (
+            row.get(
+                "move_status",
+                "",
+            )
+            or ""
+        )
+
+        if move_status != "PENDING":
+            QMessageBox.information(
+                self,
+                "Move Already Completed",
+                (
+                    f"This {move_type or 'switch-list'} "
+                    "instruction has already been completed."
+                ),
+            )
+
+            self.refresh()
+
+            return
+
+        can_complete, message = (
+            SwitchListMoveService.can_complete_move(
+                car_move_id
+            )
+        )
+
+        if not can_complete:
+            QMessageBox.warning(
+                self,
+                "Move Cannot Be Completed",
+                message,
+            )
 
             return
 
@@ -583,53 +900,75 @@ class SwitchListWidget(QWidget):
             or ""
         )
 
-        destination = (
+        train_name = (
             row.get(
-                "destination",
+                "train",
                 "",
             )
             or ""
         )
 
-        destination_track = (
+        route_sequence = (
             row.get(
-                "destination_track",
-                "",
+                "route_sequence"
             )
-            or ""
         )
 
-        destination_spot = (
+        instruction_location = (
             row.get(
-                "destination_spot",
+                "instruction_location",
                 "",
             )
             or ""
         )
 
         confirmation_text = (
-            f"Complete the move for {car_name}?\n\n"
-            f"Destination: {destination}"
+            f"Complete {move_type} for {car_name}?"
         )
 
-        if destination_track:
-
+        if train_name:
             confirmation_text += (
-                f"\nTrack: {destination_track}"
+                f"\n\nTrain: {train_name}"
             )
 
-        if destination_spot:
-
+        if route_sequence is not None:
             confirmation_text += (
-                f"\nSpot: {destination_spot}"
+                f"\nRoute Sequence: {route_sequence}"
             )
 
-        confirmation_text += (
-            "\n\n"
-            "The car will be moved to the destination "
-            "spot and the Waybill will be marked "
-            "COMPLETED."
-        )
+        if instruction_location:
+            confirmation_text += (
+                f"\nLocation: {instruction_location}"
+            )
+
+        if move_type == "PICKUP":
+            confirmation_text += (
+                "\n\n"
+                "This will mark the PICKUP instruction "
+                "COMPLETED and place the Waybill "
+                "IN_PROGRESS."
+            )
+
+        elif move_type == "SETOUT":
+            confirmation_text += (
+                "\n\n"
+                "This will move the car to its Waybill "
+                "destination and mark the SETOUT "
+                "instruction COMPLETED."
+            )
+
+            confirmation_text += (
+                "\n"
+                "If no required moves remain, the Waybill "
+                "will also be marked COMPLETED."
+            )
+
+        else:
+            confirmation_text += (
+                "\n\n"
+                "This will complete the selected "
+                "switch-list instruction."
+            )
 
         answer = QMessageBox.question(
             self,
@@ -643,21 +982,15 @@ class SwitchListWidget(QWidget):
         )
 
         if answer != QMessageBox.Yes:
-
             return
-
-        #
-        # Complete the move.
-        #
 
         success, result_message = (
             SwitchListMoveService.complete_move(
-                waybill_id
+                car_move_id
             )
         )
 
         if not success:
-
             QMessageBox.warning(
                 self,
                 "Move Failed",
@@ -667,10 +1000,6 @@ class SwitchListWidget(QWidget):
             self.refresh()
 
             return
-
-        #
-        # Refresh the switch list.
-        #
 
         self.refresh()
 
@@ -687,14 +1016,23 @@ class SwitchListWidget(QWidget):
     def preview_switch_list(
         self,
     ):
-
         operations_session_id = (
             self.session_combo.currentData()
         )
 
         if operations_session_id is None:
-
             return
+
+        train_id = (
+            self.train_combo.currentData()
+        )
+
+        train_name = ""
+
+        if train_id is not None:
+            train_name = (
+                self.train_combo.currentText()
+            )
 
         session_name = (
             self.session_combo.currentText()
@@ -702,21 +1040,13 @@ class SwitchListWidget(QWidget):
 
         session_date = None
 
-        #
-        # Get the actual Operations Session
-        # so the preview receives the real
-        # operating date.
-        #
-
         with SessionLocal() as session:
-
             operations_session = session.get(
                 OperationsSession,
                 operations_session_id,
             )
 
             if operations_session is not None:
-
                 session_name = (
                     operations_session.name
                     or (
@@ -735,6 +1065,8 @@ class SwitchListWidget(QWidget):
             ),
             session_name=session_name,
             session_date=session_date,
+            train_id=train_id,
+            train_name=train_name,
             parent=self,
         )
 
@@ -747,46 +1079,92 @@ class SwitchListWidget(QWidget):
     def refresh(
         self,
     ):
-
-        current_id = (
+        current_session_id = (
             self.session_combo.currentData()
         )
 
-        self.load_operations_sessions()
+        current_train_id = (
+            self.train_combo.currentData()
+        )
 
-        if current_id is not None:
+        self.session_combo.blockSignals(
+            True
+        )
 
-            index = (
-                self.session_combo.findData(
-                    current_id
+        self.session_combo.clear()
+
+        self.session_combo.addItem(
+            "Select Operations Session",
+            None,
+        )
+
+        with SessionLocal() as session:
+            statement = (
+                select(
+                    OperationsSession
+                )
+                .order_by(
+                    OperationsSession.session_date.desc(),
+                    OperationsSession.id.desc(),
                 )
             )
 
-            if index >= 0:
+            sessions = (
+                session.execute(
+                    statement
+                )
+                .scalars()
+                .all()
+            )
 
-                self.session_combo.setCurrentIndex(
-                    index
+            for operations_session in sessions:
+                display_name = (
+                    self.get_operations_session_display_name(
+                        operations_session
+                    )
                 )
 
-                self.load_switch_list()
+                self.session_combo.addItem(
+                    display_name,
+                    operations_session.id,
+                )
 
-                return
+        if current_session_id is not None:
+            session_index = (
+                self.session_combo.findData(
+                    current_session_id
+                )
+            )
 
-        self.model.set_operations_session(
-            None
-        )
+            if session_index >= 0:
+                self.session_combo.setCurrentIndex(
+                    session_index
+                )
 
-        self.preview_button.setEnabled(
+        self.session_combo.blockSignals(
             False
         )
 
-        self.complete_move_button.setEnabled(
-            False
+        if current_session_id is None:
+            self.clear_switch_list()
+            return
+
+        session_index = (
+            self.session_combo.findData(
+                current_session_id
+            )
         )
 
-        self.status_label.setText(
-            "Select an Operations Session."
+        if session_index < 0:
+            self.clear_switch_list()
+            return
+
+        self.load_train_options(
+            current_session_id,
+            selected_train_id=current_train_id,
         )
+
+        self.load_switch_list()
 
     #
     # Show event
@@ -796,7 +1174,6 @@ class SwitchListWidget(QWidget):
         self,
         event,
     ):
-
         super().showEvent(
             event
         )

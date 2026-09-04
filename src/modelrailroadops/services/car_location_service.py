@@ -36,10 +36,20 @@ class CarLocationService:
         session,
         operations_session_id,
     ):
-        """Start a PLANNED session when its first car is moved.
+        """
+        Validate an Operations Session before recording a
+        car movement against it.
 
-        The status change shares the car-movement transaction, so a failed
-        move cannot leave the Operations Session marked ACTIVE.
+        Car-location movement must never start an Operations
+        Session.
+
+        A PLANNED Operations Session becomes ACTIVE through
+        the Operations/Switch List workflow when its first
+        PICKUP instruction is completed.
+
+        Therefore, a car movement associated with an
+        Operations Session is allowed only when that session
+        is already ACTIVE.
         """
 
         if operations_session_id is None:
@@ -51,14 +61,25 @@ class CarLocationService:
         )
 
         if operations_session is None:
-            return False, "The Operations Session was not found."
-
-        if operations_session.status == "PLANNED":
-            operations_session.status = "ACTIVE"
-            return True, ""
+            return (
+                False,
+                "The Operations Session was not found.",
+            )
 
         if operations_session.status == "ACTIVE":
             return True, ""
+
+        if operations_session.status == "PLANNED":
+            return (
+                False,
+                (
+                    f"Operations Session '{operations_session.name}' "
+                    "is PLANNED and has not started.\n\n"
+                    "Complete the first PICKUP instruction to start "
+                    "the Operations Session before recording car "
+                    "movements against it."
+                ),
+            )
 
         return (
             False,
@@ -82,7 +103,6 @@ class CarLocationService:
         """
 
         if value is None:
-
             return ""
 
         return str(value).strip().casefold()
@@ -112,31 +132,17 @@ class CarLocationService:
         when the car violates a restriction.
         """
 
-        #
-        # Spot
-        #
-
         if spot is None:
-
             return (
                 False,
-                "Spot not found."
+                "Spot not found.",
             )
-
-        #
-        # Car
-        #
 
         if car is None:
-
             return (
                 False,
-                "Car not found."
+                "Car not found.",
             )
-
-        #
-        # Allowed car type
-        #
 
         if spot.allowed_car_type:
 
@@ -162,12 +168,8 @@ class CarLocationService:
                         f"{car.car_type or 'Unknown'}\n"
                         f"Required: "
                         f"{spot.allowed_car_type}"
-                    )
+                    ),
                 )
-
-        #
-        # Allowed owner
-        #
 
         if spot.allowed_owner:
 
@@ -193,12 +195,8 @@ class CarLocationService:
                         f"{car.owner or 'Unknown'}\n"
                         f"Required: "
                         f"{spot.allowed_owner}"
-                    )
+                    ),
                 )
-
-        #
-        # Maximum length
-        #
 
         if spot.max_length is not None:
 
@@ -211,7 +209,7 @@ class CarLocationService:
                         f"This spot has a maximum "
                         f"length of "
                         f"{spot.max_length} ft."
-                    )
+                    ),
                 )
 
             if car.length > spot.max_length:
@@ -224,12 +222,8 @@ class CarLocationService:
                         f"{car.length} ft\n"
                         f"Maximum: "
                         f"{spot.max_length} ft"
-                    )
+                    ),
                 )
-
-        #
-        # Hazardous restriction
-        #
 
         if not spot.hazardous_allowed:
 
@@ -244,12 +238,8 @@ class CarLocationService:
                     (
                         "Hazardous cars are not "
                         "allowed in this spot."
-                    )
+                    ),
                 )
-
-        #
-        # Loaded-only restriction
-        #
 
         if spot.load_only:
 
@@ -268,12 +258,8 @@ class CarLocationService:
                         "a loaded car.\n\n"
                         f"Car status: "
                         f"{car.status or 'Unknown'}"
-                    )
+                    ),
                 )
-
-        #
-        # Empty-only restriction
-        #
 
         if spot.empty_only:
 
@@ -292,12 +278,8 @@ class CarLocationService:
                         "an empty car.\n\n"
                         f"Car status: "
                         f"{car.status or 'Unknown'}"
-                    )
+                    ),
                 )
-
-        #
-        # All restrictions passed.
-        #
 
         return True, ""
 
@@ -333,10 +315,9 @@ class CarLocationService:
             )
 
             if car is None:
-
                 return (
                     False,
-                    "Car not found."
+                    "Car not found.",
                 )
 
             spot = session.get(
@@ -345,15 +326,10 @@ class CarLocationService:
             )
 
             if spot is None:
-
                 return (
                     False,
-                    "Spot not found."
+                    "Spot not found.",
                 )
-
-            #
-            # Validate spot restrictions.
-            #
 
             valid, message = (
                 CarLocationService.validate_car_for_spot(
@@ -363,16 +339,10 @@ class CarLocationService:
             )
 
             if not valid:
-
                 return (
                     False,
                     message,
                 )
-
-            #
-            # Check whether another car occupies
-            # the destination spot.
-            #
 
             existing_car = (
                 session.execute(
@@ -388,10 +358,9 @@ class CarLocationService:
                 existing_car is not None
                 and existing_car.id != car.id
             ):
-
                 return (
                     False,
-                    "The selected spot is already occupied."
+                    "The selected spot is already occupied.",
                 )
 
             return True, ""
@@ -421,12 +390,7 @@ class CarLocationService:
             )
 
             if spot is None:
-
                 return []
-
-            #
-            # Only completely unassigned cars are candidates.
-            #
 
             cars = (
                 session.execute(
@@ -457,7 +421,6 @@ class CarLocationService:
                 )
 
                 if valid:
-
                     eligible_cars.append(
                         car
                     )
@@ -473,6 +436,7 @@ class CarLocationService:
         car_id,
         spot_id,
         operations_session_id=None,
+        db_session=None,
     ):
         """
         Assign or move a car to a spot.
@@ -480,6 +444,12 @@ class CarLocationService:
         operations_session_id is optional. When supplied,
         it is recorded on the resulting CarMovement history
         record.
+
+        A supplied Operations Session must already be ACTIVE.
+        Car movement itself never starts an Operations Session.
+
+        When db_session is supplied, the caller owns the
+        transaction and is responsible for commit/rollback.
 
         Returns:
 
@@ -494,11 +464,17 @@ class CarLocationService:
         when the operation fails.
         """
 
-        with SessionLocal() as session:
+        owns_session = (
+            db_session is None
+        )
 
-            #
-            # Get car.
-            #
+        session = (
+            SessionLocal()
+            if owns_session
+            else db_session
+        )
+
+        try:
 
             car = session.get(
                 Car,
@@ -506,15 +482,10 @@ class CarLocationService:
             )
 
             if car is None:
-
                 return (
                     False,
-                    "Car not found."
+                    "Car not found.",
                 )
-
-            #
-            # Get destination spot.
-            #
 
             spot = session.get(
                 Spot,
@@ -522,15 +493,10 @@ class CarLocationService:
             )
 
             if spot is None:
-
                 return (
                     False,
-                    "Destination spot not found."
+                    "Destination spot not found.",
                 )
-
-            #
-            # Validate spot restrictions.
-            #
 
             valid, message = (
                 CarLocationService.validate_car_for_spot(
@@ -540,15 +506,10 @@ class CarLocationService:
             )
 
             if not valid:
-
                 return (
                     False,
                     message,
                 )
-
-            #
-            # Check destination occupancy.
-            #
 
             existing_car = (
                 session.execute(
@@ -564,10 +525,9 @@ class CarLocationService:
                 existing_car is not None
                 and existing_car.id != car.id
             ):
-
                 return (
                     False,
-                    "The destination spot is already occupied."
+                    "The destination spot is already occupied.",
                 )
 
             session_ready, message = (
@@ -578,11 +538,10 @@ class CarLocationService:
             )
 
             if not session_ready:
-                return False, message
-
-            #
-            # Get track.
-            #
+                return (
+                    False,
+                    message,
+                )
 
             track = session.get(
                 IndustryTrack,
@@ -590,15 +549,10 @@ class CarLocationService:
             )
 
             if track is None:
-
                 return (
                     False,
-                    "The spot's industry track could not be found."
+                    "The spot's industry track could not be found.",
                 )
-
-            #
-            # Get industry.
-            #
 
             industry = session.get(
                 Industry,
@@ -606,15 +560,10 @@ class CarLocationService:
             )
 
             if industry is None:
-
                 return (
                     False,
-                    "The spot's industry could not be found."
+                    "The spot's industry could not be found.",
                 )
-
-            #
-            # Determine previous location.
-            #
 
             old_location = "Unassigned"
 
@@ -628,7 +577,6 @@ class CarLocationService:
                 old_track = None
 
                 if car.track_id is not None:
-
                     old_track = session.get(
                         IndustryTrack,
                         car.track_id,
@@ -637,7 +585,6 @@ class CarLocationService:
                 old_industry = None
 
                 if car.industry_id is not None:
-
                     old_industry = session.get(
                         Industry,
                         car.industry_id,
@@ -648,18 +595,12 @@ class CarLocationService:
                     and old_track is not None
                     and old_industry is not None
                 ):
-
                     old_location = (
                         f"{old_industry.name} - "
                         f"{old_track.name} - "
                         f"Spot "
                         f"{old_spot.spot_number}"
                     )
-
-            #
-            # Handle a car that has an industry/track
-            # location but no spot.
-            #
 
             elif (
                 car.track_id is not None
@@ -669,7 +610,6 @@ class CarLocationService:
                 old_track = None
 
                 if car.track_id is not None:
-
                     old_track = session.get(
                         IndustryTrack,
                         car.track_id,
@@ -678,7 +618,6 @@ class CarLocationService:
                 old_industry = None
 
                 if car.industry_id is not None:
-
                     old_industry = session.get(
                         Industry,
                         car.industry_id,
@@ -688,21 +627,15 @@ class CarLocationService:
                     old_industry is not None
                     and old_track is not None
                 ):
-
                     old_location = (
                         f"{old_industry.name} - "
                         f"{old_track.name}"
                     )
 
                 elif old_industry is not None:
-
                     old_location = (
                         old_industry.name
                     )
-
-            #
-            # New location.
-            #
 
             new_location = (
                 f"{industry.name} - "
@@ -711,33 +644,22 @@ class CarLocationService:
                 f"{spot.spot_number}"
             )
 
-            #
-            # Determine movement type.
-            #
-
             movement_type = (
                 "ASSIGN"
                 if old_location == "Unassigned"
                 else "MOVE"
             )
 
-            #
-            # Update car location.
-            #
-
             car.industry_id = industry.id
             car.track_id = track.id
             car.spot_id = spot.id
-            car.operating_location_id = industry.operating_location_id
-            car.operating_track_id = track.operating_track_id
+            car.operating_location_id = (
+                industry.operating_location_id
+            )
+            car.operating_track_id = (
+                track.operating_track_id
+            )
             car.location = new_location
-
-            #
-            # Record movement history.
-            #
-            # If this move belongs to an Operations Session,
-            # associate the movement with that session.
-            #
 
             movement = CarMovement(
                 car_id=car.id,
@@ -751,20 +673,33 @@ class CarLocationService:
                 movement
             )
 
-            #
-            # Commit transaction.
-            #
+            if owns_session:
 
-            session.commit()
+                session.commit()
 
-            session.refresh(
-                car
-            )
+                session.refresh(
+                    car
+                )
 
             return (
                 True,
-                ""
+                "",
             )
+
+        except Exception as exc:
+
+            if owns_session:
+                session.rollback()
+
+            return (
+                False,
+                str(exc),
+            )
+
+        finally:
+
+            if owns_session:
+                session.close()
 
     # ==========================================================
     # MOVE CAR TO GENERAL LOCATION TRACK
@@ -775,31 +710,78 @@ class CarLocationService:
         car_id,
         location_track_id,
         operations_session_id=None,
+        db_session=None,
     ):
-        """Move a car to a yard, staging, or interchange track."""
+        """
+        Move a car to a yard, staging, or interchange track.
 
-        with SessionLocal() as session:
+        When operations_session_id is supplied, the Operations
+        Session must already be ACTIVE. Car movement itself
+        never starts an Operations Session.
 
-            car = session.get(Car, car_id)
-            track = session.get(LocationTrack, location_track_id)
+        When db_session is supplied, the caller owns the
+        transaction and is responsible for commit/rollback.
+        """
+
+        owns_session = (
+            db_session is None
+        )
+
+        session = (
+            SessionLocal()
+            if owns_session
+            else db_session
+        )
+
+        try:
+
+            car = session.get(
+                Car,
+                car_id,
+            )
+
+            track = session.get(
+                LocationTrack,
+                location_track_id,
+            )
 
             if car is None:
-                return False, "Car not found."
+                return (
+                    False,
+                    "Car not found.",
+                )
 
             if track is None:
-                return False, "Destination track not found."
+                return (
+                    False,
+                    "Destination track not found.",
+                )
 
-            location = session.get(Location, track.location_id)
+            location = session.get(
+                Location,
+                track.location_id,
+            )
 
             if location is None:
-                return False, "Destination location not found."
+                return (
+                    False,
+                    "Destination location not found.",
+                )
 
-            if not location.active or not track.active:
-                return False, "Destination location and track must be active."
+            if (
+                not location.active
+                or not track.active
+            ):
+                return (
+                    False,
+                    "Destination location and track must be active.",
+                )
 
             industry_track = (
                 session.execute(
-                    select(IndustryTrack).where(
+                    select(
+                        IndustryTrack
+                    ).where(
                         IndustryTrack.operating_track_id
                         == location_track_id
                     )
@@ -815,11 +797,14 @@ class CarLocationService:
                 )
 
             if track.capacity is not None:
+
                 occupied = len(
                     session.execute(
                         select(Car).where(
-                            Car.operating_track_id == location_track_id,
-                            Car.id != car_id,
+                            Car.operating_track_id
+                            == location_track_id,
+                            Car.id
+                            != car_id,
                         )
                     )
                     .scalars()
@@ -827,7 +812,10 @@ class CarLocationService:
                 )
 
                 if occupied >= track.capacity:
-                    return False, "The destination track is at capacity."
+                    return (
+                        False,
+                        "The destination track is at capacity.",
+                    )
 
             session_ready, message = (
                 CarLocationService._prepare_operations_session_for_movement(
@@ -837,10 +825,21 @@ class CarLocationService:
             )
 
             if not session_ready:
-                return False, message
+                return (
+                    False,
+                    message,
+                )
 
-            old_location = car.location or "Unassigned"
-            new_location = f"{location.name} - {track.name}"
+            old_location = (
+                car.location
+                or "Unassigned"
+            )
+
+            new_location = (
+                f"{location.name} - "
+                f"{track.name}"
+            )
+
             movement_type = (
                 "ASSIGN"
                 if old_location == "Unassigned"
@@ -850,8 +849,12 @@ class CarLocationService:
             car.industry_id = None
             car.track_id = None
             car.spot_id = None
-            car.operating_location_id = location.id
-            car.operating_track_id = track.id
+            car.operating_location_id = (
+                location.id
+            )
+            car.operating_track_id = (
+                track.id
+            )
             car.location = new_location
 
             session.add(
@@ -864,9 +867,33 @@ class CarLocationService:
                 )
             )
 
-            session.commit()
+            if owns_session:
 
-            return True, ""
+                session.commit()
+
+                session.refresh(
+                    car
+                )
+
+            return (
+                True,
+                "",
+            )
+
+        except Exception as exc:
+
+            if owns_session:
+                session.rollback()
+
+            return (
+                False,
+                str(exc),
+            )
+
+        finally:
+
+            if owns_session:
+                session.close()
 
     # ==========================================================
     # ASSIGN CAR
@@ -900,7 +927,6 @@ class CarLocationService:
         )
 
         if not success:
-
             return False
 
         with SessionLocal() as session:
@@ -939,7 +965,6 @@ class CarLocationService:
         )
 
         if not success:
-
             return False
 
         with SessionLocal() as session:
@@ -1004,22 +1029,12 @@ class CarLocationService:
             )
 
             if car is None:
-
                 return False
-
-            #
-            # Previous location.
-            #
 
             old_location = (
                 car.location
                 or "Unassigned"
             )
-
-            #
-            # If location text is missing, reconstruct
-            # the location from the relationships.
-            #
 
             if old_location == "Unassigned":
 
@@ -1049,7 +1064,6 @@ class CarLocationService:
                         and old_track is not None
                         and old_industry is not None
                     ):
-
                         old_location = (
                             f"{old_industry.name} - "
                             f"{old_track.name} - "
@@ -1057,20 +1071,12 @@ class CarLocationService:
                             f"{old_spot.spot_number}"
                         )
 
-            #
-            # Clear location.
-            #
-
             car.industry_id = None
             car.track_id = None
             car.spot_id = None
             car.operating_location_id = None
             car.operating_track_id = None
             car.location = "Unassigned"
-
-            #
-            # Record movement.
-            #
 
             movement = CarMovement(
                 car_id=car.id,
@@ -1112,7 +1118,6 @@ class CarLocationService:
             )
 
             if car is None:
-
                 return None
 
             industry_name = None
@@ -1122,10 +1127,6 @@ class CarLocationService:
             location_type = None
             traffic_use = None
 
-            #
-            # Load industry.
-            #
-
             if car.industry_id is not None:
 
                 industry = session.get(
@@ -1134,14 +1135,9 @@ class CarLocationService:
                 )
 
                 if industry is not None:
-
                     industry_name = (
                         industry.name
                     )
-
-            #
-            # Load track.
-            #
 
             if car.track_id is not None:
 
@@ -1151,7 +1147,6 @@ class CarLocationService:
                 )
 
                 if track is not None:
-
                     track_name = (
                         track.name
                     )
@@ -1164,8 +1159,12 @@ class CarLocationService:
                 )
 
                 if operating_location is not None:
-                    location_name = operating_location.name
-                    location_type = operating_location.location_type
+                    location_name = (
+                        operating_location.name
+                    )
+                    location_type = (
+                        operating_location.location_type
+                    )
 
             if car.operating_track_id is not None:
 
@@ -1175,12 +1174,12 @@ class CarLocationService:
                 )
 
                 if operating_track is not None:
-                    track_name = operating_track.name
-                    traffic_use = operating_track.traffic_use
-
-            #
-            # Load spot.
-            #
+                    track_name = (
+                        operating_track.name
+                    )
+                    traffic_use = (
+                        operating_track.traffic_use
+                    )
 
             if car.spot_id is not None:
 
@@ -1190,7 +1189,6 @@ class CarLocationService:
                 )
 
                 if spot is not None:
-
                     spot_number = (
                         spot.spot_number
                     )
@@ -1200,19 +1198,12 @@ class CarLocationService:
                     f"{car.reporting_mark} "
                     f"{car.number}"
                 ),
-
                 "industry": industry_name,
-
                 "operating_location": location_name,
-
                 "location_type": location_type,
-
                 "track": track_name,
-
                 "spot": spot_number,
-
                 "traffic_use": traffic_use,
-
                 "location": (
                     car.location
                     or "Unassigned"
@@ -1225,18 +1216,20 @@ class CarLocationService:
 
     @staticmethod
     def delete(
-        car_id
+        car_id,
     ):
 
         with SessionLocal() as session:
 
             car = session.get(
                 Car,
-                car_id
+                car_id,
             )
 
             if car:
 
-                session.delete(car)
+                session.delete(
+                    car
+                )
 
                 session.commit()

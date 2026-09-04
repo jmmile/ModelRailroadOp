@@ -796,10 +796,18 @@ class CarMoveService:
     #
     # Complete a CarMove.
     #
+    # When db_session is supplied, the caller owns the
+    # transaction and is responsible for commit/rollback.
+    #
+    # When db_session is not supplied, this method retains
+    # its original standalone behavior and commits the
+    # completed CarMove itself.
+    #
 
     @staticmethod
     def complete(
         move_id,
+        db_session=None,
     ):
 
         if move_id is None:
@@ -809,7 +817,17 @@ class CarMoveService:
                 "Car Move ID is required.",
             )
 
-        with SessionLocal() as session:
+        owns_session = (
+            db_session is None
+        )
+
+        session = (
+            SessionLocal()
+            if owns_session
+            else db_session
+        )
+
+        try:
 
             move = session.get(
                 CarMove,
@@ -902,7 +920,16 @@ class CarMoveService:
 
             move.completed_at = datetime.utcnow()
 
-            try:
+            #
+            # A standalone call owns its transaction and
+            # therefore commits immediately.
+            #
+            # A caller-supplied session is intentionally
+            # left uncommitted so this change may participate
+            # in a larger atomic transaction.
+            #
+
+            if owns_session:
 
                 session.commit()
 
@@ -910,19 +937,27 @@ class CarMoveService:
                     move
                 )
 
-            except Exception as exc:
-
-                session.rollback()
-
-                return (
-                    False,
-                    str(exc),
-                )
-
             return (
                 True,
                 move,
             )
+
+        except Exception as exc:
+
+            if owns_session:
+
+                session.rollback()
+
+            return (
+                False,
+                str(exc),
+            )
+
+        finally:
+
+            if owns_session:
+
+                session.close()
 
     #
     # Delete move.

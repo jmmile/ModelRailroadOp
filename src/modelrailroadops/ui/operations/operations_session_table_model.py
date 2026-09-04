@@ -8,8 +8,8 @@ from PySide6.QtCore import (
 class OperationsSessionTableModel(
     QAbstractTableModel
 ):
-
     HEADERS = [
+        "Session #",
         "Session",
         "Date",
         "Status",
@@ -109,10 +109,16 @@ class OperationsSessionTableModel(
             if column == 0:
 
                 return (
-                    operations_session.name
+                    operations_session.id
                 )
 
             if column == 1:
+
+                return (
+                    operations_session.name
+                )
+
+            if column == 2:
 
                 if (
                     operations_session.session_date
@@ -129,13 +135,13 @@ class OperationsSessionTableModel(
                     )
                 )
 
-            if column == 2:
+            if column == 3:
 
                 return (
                     operations_session.status
                 )
 
-            if column == 3:
+            if column == 4:
 
                 return (
                     operations_session.notes
@@ -144,11 +150,15 @@ class OperationsSessionTableModel(
 
         if role == Qt.TextAlignmentRole:
 
-            if column == 1:
+            if column == 0:
 
                 return Qt.AlignCenter
 
             if column == 2:
+
+                return Qt.AlignCenter
+
+            if column == 3:
 
                 return Qt.AlignCenter
 
@@ -184,4 +194,6 @@ class OperationsSessionTableModel(
 
             return None
 
-        return self.sessions[row]
+        return self.sessions[
+            row
+        ]

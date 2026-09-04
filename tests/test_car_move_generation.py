@@ -24,7 +24,10 @@ def seed_route_scenario(
     destination_track_on_route=True,
     operations_session_status="PLANNED",
 ):
-    """Create one assigned train and one waybill for route-generation tests."""
+    """
+    Create one assigned train and one waybill for
+    route-generation tests.
+    """
 
     with test_database.SessionLocal() as session:
         staging = Location(
@@ -32,22 +35,34 @@ def seed_route_scenario(
             location_type="STAGING",
             active=True,
         )
+
         pine_bluff = Location(
             name="Pine Bluff",
             location_type="TOWN",
             active=True,
         )
+
         weston = Location(
             name="Weston",
             location_type="YARD",
             active=True,
         )
+
         devin = Location(
             name="Devin",
             location_type="TOWN",
             active=True,
         )
-        session.add_all((staging, pine_bluff, weston, devin))
+
+        session.add_all(
+            (
+                staging,
+                pine_bluff,
+                weston,
+                devin,
+            )
+        )
+
         session.flush()
 
         staging_track = LocationTrack(
@@ -57,6 +72,7 @@ def seed_route_scenario(
             traffic_use="BOTH",
             active=True,
         )
+
         pine_bluff_track = LocationTrack(
             location_id=pine_bluff.id,
             name="Main",
@@ -64,6 +80,7 @@ def seed_route_scenario(
             traffic_use="BOTH",
             active=True,
         )
+
         weston_arrival = LocationTrack(
             location_id=weston.id,
             name="Arrival",
@@ -71,6 +88,7 @@ def seed_route_scenario(
             traffic_use="ARRIVAL",
             active=True,
         )
+
         weston_classification = LocationTrack(
             location_id=weston.id,
             name="Classification",
@@ -78,6 +96,7 @@ def seed_route_scenario(
             traffic_use="BOTH",
             active=True,
         )
+
         devin_track = LocationTrack(
             location_id=devin.id,
             name="Siding",
@@ -85,6 +104,7 @@ def seed_route_scenario(
             traffic_use="BOTH",
             active=True,
         )
+
         session.add_all(
             (
                 staging_track,
@@ -94,6 +114,7 @@ def seed_route_scenario(
                 devin_track,
             )
         )
+
         session.flush()
 
         train = Train(
@@ -102,11 +123,17 @@ def seed_route_scenario(
             train_type="Through Freight",
             active=True,
         )
+
         operations_session = OperationsSession(
             name="Weston Inbound",
-            session_date=date(2026, 9, 1),
+            session_date=date(
+                2026,
+                9,
+                1,
+            ),
             status=operations_session_status,
         )
+
         car = Car(
             reporting_mark="TEST",
             number="3003",
@@ -117,18 +144,40 @@ def seed_route_scenario(
             operating_location_id=staging.id,
             operating_track_id=staging_track.id,
         )
-        session.add_all((train, operations_session, car))
+
+        session.add_all(
+            (
+                train,
+                operations_session,
+                car,
+            )
+        )
+
         session.flush()
 
         if reverse_route:
-            staging_sequence, destination_sequence = 3, 1
+            staging_sequence = 3
+            destination_sequence = 1
         else:
-            staging_sequence, destination_sequence = 1, 3
+            staging_sequence = 1
+            destination_sequence = 3
 
-        destination_location = weston if destination_on_route else devin
-        destination_track = weston_arrival if destination_on_route else devin_track
+        destination_location = (
+            weston
+            if destination_on_route
+            else devin
+        )
+
+        destination_track = (
+            weston_arrival
+            if destination_on_route
+            else devin_track
+        )
+
         route_destination_track = (
-            weston_arrival if destination_track_on_route else weston_classification
+            weston_arrival
+            if destination_track_on_route
+            else weston_classification
         )
 
         session.add_all(
@@ -173,7 +222,11 @@ def seed_route_scenario(
             cargo_weight_lbs=0,
             status="ACTIVE",
         )
-        session.add(waybill)
+
+        session.add(
+            waybill
+        )
+
         session.commit()
 
         return {
@@ -183,11 +236,19 @@ def seed_route_scenario(
         }
 
 
-def test_matching_route_generates_pickup_and_setout(test_database):
-    record_ids = seed_route_scenario(test_database)
+def test_matching_route_generates_pickup_and_setout(
+    test_database,
+):
+    record_ids = seed_route_scenario(
+        test_database
+    )
 
-    success, result = CarMoveGenerationService.generate(
-        record_ids["operations_session_id"]
+    success, result = (
+        CarMoveGenerationService.generate(
+            record_ids[
+                "operations_session_id"
+            ]
+        )
     )
 
     assert success
@@ -197,97 +258,259 @@ def test_matching_route_generates_pickup_and_setout(test_database):
     with test_database.SessionLocal() as session:
         moves = (
             session.execute(
-                select(CarMove).order_by(CarMove.route_sequence, CarMove.id)
+                select(
+                    CarMove
+                ).order_by(
+                    CarMove.route_sequence,
+                    CarMove.id,
+                )
             )
             .scalars()
             .all()
         )
 
-        assert [move.move_type for move in moves] == ["PICKUP", "SETOUT"]
-        assert [move.route_sequence for move in moves] == [1, 3]
-        assert all(move.status == "PENDING" for move in moves)
-        assert all(move.train_id == record_ids["train_id"] for move in moves)
-        assert all(move.waybill_id == record_ids["waybill_id"] for move in moves)
+        assert [
+            move.move_type
+            for move in moves
+        ] == [
+            "PICKUP",
+            "SETOUT",
+        ]
+
+        assert [
+            move.route_sequence
+            for move in moves
+        ] == [
+            1,
+            3,
+        ]
+
+        assert all(
+            move.status == "PENDING"
+            for move in moves
+        )
+
+        assert all(
+            move.train_id
+            == record_ids["train_id"]
+            for move in moves
+        )
+
+        assert all(
+            move.waybill_id
+            == record_ids["waybill_id"]
+            for move in moves
+        )
 
 
-def test_regenerating_does_not_duplicate_existing_moves(test_database):
-    record_ids = seed_route_scenario(test_database)
-
-    first_success, first_result = CarMoveGenerationService.generate(
-        record_ids["operations_session_id"]
+def test_regenerating_does_not_duplicate_existing_moves(
+    test_database,
+):
+    record_ids = seed_route_scenario(
+        test_database
     )
-    second_success, second_result = CarMoveGenerationService.generate(
-        record_ids["operations_session_id"]
+
+    first_success, first_result = (
+        CarMoveGenerationService.generate(
+            record_ids[
+                "operations_session_id"
+            ]
+        )
+    )
+
+    second_success, second_result = (
+        CarMoveGenerationService.generate(
+            record_ids[
+                "operations_session_id"
+            ]
+        )
     )
 
     assert first_success
     assert first_result["generated"] == 2
+
     assert second_success
     assert second_result["generated"] == 0
     assert second_result["skipped"] == 1
-    assert "already has Car Moves" in second_result["messages"][0]
+
+    assert (
+        "already has Car Moves"
+        in second_result["messages"][0]
+    )
 
     with test_database.SessionLocal() as session:
-        move_count = session.scalar(select(func.count()).select_from(CarMove))
+        move_count = session.scalar(
+            select(
+                func.count()
+            ).select_from(
+                CarMove
+            )
+        )
+
         assert move_count == 2
 
 
-def test_waybill_without_matching_destination_is_skipped(test_database):
-    record_ids = seed_route_scenario(test_database, destination_on_route=False)
+def test_waybill_without_matching_destination_is_skipped(
+    test_database,
+):
+    record_ids = seed_route_scenario(
+        test_database,
+        destination_on_route=False,
+    )
 
-    success, result = CarMoveGenerationService.generate(
-        record_ids["operations_session_id"]
+    success, result = (
+        CarMoveGenerationService.generate(
+            record_ids[
+                "operations_session_id"
+            ]
+        )
     )
 
     assert success
     assert result["generated"] == 0
     assert result["skipped"] == 1
-    assert "No assigned train has a route" in result["messages"][0]
+
+    assert (
+        "No assigned train has a route"
+        in result["messages"][0]
+    )
 
     with test_database.SessionLocal() as session:
-        move_count = session.scalar(select(func.count()).select_from(CarMove))
+        move_count = session.scalar(
+            select(
+                func.count()
+            ).select_from(
+                CarMove
+            )
+        )
+
         assert move_count == 0
 
 
-def test_route_must_visit_origin_before_destination(test_database):
-    record_ids = seed_route_scenario(test_database, reverse_route=True)
+def test_route_must_visit_origin_before_destination(
+    test_database,
+):
+    record_ids = seed_route_scenario(
+        test_database,
+        reverse_route=True,
+    )
 
-    success, result = CarMoveGenerationService.generate(
-        record_ids["operations_session_id"]
+    success, result = (
+        CarMoveGenerationService.generate(
+            record_ids[
+                "operations_session_id"
+            ]
+        )
     )
 
     assert success
     assert result["generated"] == 0
     assert result["skipped"] == 1
-    assert "No assigned train has a route" in result["messages"][0]
+
+    assert (
+        "No assigned train has a route"
+        in result["messages"][0]
+    )
 
 
-def test_structured_track_must_match_route_track(test_database):
+def test_different_track_at_same_location_still_matches_route(
+    test_database,
+):
+    """
+    A TrainRoute stop represents service to the entire
+    Location.
+
+    A Waybill may therefore use a different siding or
+    track at that same Location and still be handled by
+    the Train.
+
+    The Waybill controls the final destination track.
+    """
+
     record_ids = seed_route_scenario(
         test_database,
         destination_track_on_route=False,
     )
 
-    success, result = CarMoveGenerationService.generate(
-        record_ids["operations_session_id"]
+    success, result = (
+        CarMoveGenerationService.generate(
+            record_ids[
+                "operations_session_id"
+            ]
+        )
     )
 
     assert success
-    assert result["generated"] == 0
-    assert result["skipped"] == 1
-    assert "No assigned train has a route" in result["messages"][0]
+    assert result["generated"] == 2
+    assert result["skipped"] == 0
+
+    with test_database.SessionLocal() as session:
+        moves = (
+            session.execute(
+                select(
+                    CarMove
+                ).order_by(
+                    CarMove.route_sequence,
+                    CarMove.id,
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        assert len(
+            moves
+        ) == 2
+
+        assert [
+            move.move_type
+            for move in moves
+        ] == [
+            "PICKUP",
+            "SETOUT",
+        ]
+
+        assert [
+            move.route_sequence
+            for move in moves
+        ] == [
+            1,
+            3,
+        ]
+
+        assert all(
+            move.train_id
+            == record_ids["train_id"]
+            for move in moves
+        )
+
+        assert all(
+            move.waybill_id
+            == record_ids["waybill_id"]
+            for move in moves
+        )
 
 
-def test_terminal_session_cannot_generate_moves(test_database):
+def test_terminal_session_cannot_generate_moves(
+    test_database,
+):
     record_ids = seed_route_scenario(
         test_database,
         operations_session_status="COMPLETED",
     )
 
-    success, result = CarMoveGenerationService.generate(
-        record_ids["operations_session_id"]
+    success, result = (
+        CarMoveGenerationService.generate(
+            record_ids[
+                "operations_session_id"
+            ]
+        )
     )
 
     assert not success
     assert result["generated"] == 0
-    assert "completed Operations Session" in result["messages"][0]
+
+    assert (
+        "completed Operations Session"
+        in result["messages"][0]
+    )

@@ -14,7 +14,12 @@ from modelrailroadops.ui.waybills.waybill_preview_dialog import WaybillPreviewDi
 from modelrailroadops.ui.waybills.waybill_table_model import WaybillTableModel
 
 
-def build_waybill(*, load_state="LOADED", cargo_weight_lbs=81_000, number="8181"):
+def build_waybill(
+    *,
+    load_state="LOADED",
+    cargo_weight_lbs=81_000,
+    number="8181",
+):
     car = Car(
         id=int(number),
         reporting_mark="RPDX",
@@ -27,6 +32,7 @@ def build_waybill(*, load_state="LOADED", cargo_weight_lbs=81_000, number="8181"
         status="AVAILABLE",
         location="Staging Yard",
     )
+
     return Waybill(
         id=int(number),
         car=car,
@@ -36,15 +42,40 @@ def build_waybill(*, load_state="LOADED", cargo_weight_lbs=81_000, number="8181"
         commodity="Gasoline" if load_state == "LOADED" else None,
         cargo_weight_lbs=cargo_weight_lbs,
         status="ACTIVE",
-        created_at=datetime(2026, 9, 2, 10, 30, tzinfo=UTC),
+        created_at=datetime(
+            2026,
+            9,
+            2,
+            10,
+            30,
+            tzinfo=UTC,
+        ),
     )
 
 
 @pytest.mark.parametrize(
-    ("load_state", "cargo_weight_lbs", "gross_weight", "tonnage", "display"),
     (
-        ("LOADED", 81_000, 121_400, 60.7, "121,400 lb\n60.7 short tons"),
-        ("EMPTY", 0, 40_400, 20.2, "40,400 lb\n20.2 short tons"),
+        "load_state",
+        "cargo_weight_lbs",
+        "gross_weight",
+        "tonnage",
+        "display",
+    ),
+    (
+        (
+            "LOADED",
+            81_000,
+            121_400,
+            60.7,
+            "121,400 lb\n60.7 short tons",
+        ),
+        (
+            "EMPTY",
+            0,
+            40_400,
+            20.2,
+            "40,400 lb\n20.2 short tons",
+        ),
     ),
 )
 def test_waybill_weight_calculation_and_print_text(
@@ -64,10 +95,23 @@ def test_waybill_weight_calculation_and_print_text(
     assert WaybillFormRenderer._weight_text(waybill) == display
 
 
-def test_waybill_table_displays_weights_and_tonnage(qapp, monkeypatch):
-    monkeypatch.setattr(WaybillTableModel, "refresh", lambda self: None)
+def test_waybill_table_displays_weights_and_tonnage(
+    qapp,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        WaybillTableModel,
+        "refresh",
+        lambda self: None,
+    )
+
     model = WaybillTableModel()
-    model.set_waybills([build_waybill()])
+
+    model.set_waybills(
+        [
+            build_waybill(),
+        ]
+    )
 
     assert model.data(model.index(0, 1)) == "RPDX 8181"
     assert model.data(model.index(0, 2)) == "Tank Car"
@@ -79,33 +123,71 @@ def test_waybill_table_displays_weights_and_tonnage(qapp, monkeypatch):
     assert model.data(model.index(0, 8)) == "60.7"
 
 
-def test_waybill_table_sorts_tonnage_numerically(qapp, monkeypatch):
-    monkeypatch.setattr(WaybillTableModel, "refresh", lambda self: None)
+def test_waybill_table_sorts_tonnage_numerically(
+    qapp,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        WaybillTableModel,
+        "refresh",
+        lambda self: None,
+    )
+
     model = WaybillTableModel()
-    loaded = build_waybill(number="8181")
+
+    loaded = build_waybill(
+        number="8181",
+    )
+
     empty = build_waybill(
         load_state="EMPTY",
         cargo_weight_lbs=0,
         number="8182",
     )
-    model.set_waybills([loaded, empty])
 
-    model.sort(8, Qt.AscendingOrder)
+    model.set_waybills(
+        [
+            loaded,
+            empty,
+        ]
+    )
 
-    assert [waybill.car.number for waybill in model.waybills] == ["8182", "8181"]
+    model.sort(
+        8,
+        Qt.AscendingOrder,
+    )
+
+    assert [
+        waybill.car.number
+        for waybill in model.waybills
+    ] == [
+        "8182",
+        "8181",
+    ]
 
 
-def test_waybill_preview_renders_expected_form_size(qapp):
-    dialog = WaybillPreviewDialog(build_waybill())
-    pixmap = dialog.preview_label.pixmap()
+def test_waybill_preview_renders_expected_form_size(
+    qapp,
+):
+    dialog = WaybillPreviewDialog(
+        build_waybill()
+    )
+
+    pixmap = (
+        dialog.preview_label.pixmap()
+    )
 
     assert pixmap is not None
     assert pixmap.width() == 600
     assert pixmap.height() == 640
+
     dialog.close()
 
 
-def test_switch_list_preview_builds_printable_escaped_html(qapp, monkeypatch):
+def test_switch_list_preview_builds_printable_escaped_html(
+    qapp,
+    monkeypatch,
+):
     row = {
         "train": "M225 - Weston & Inbound",
         "pickup_sequence": 1,
@@ -123,20 +205,32 @@ def test_switch_list_preview_builds_printable_escaped_html(qapp, monkeypatch):
         "destination_track": "Arrival",
         "destination_spot": "2",
     }
+
     monkeypatch.setattr(
-        "modelrailroadops.ui.switch_list.switch_list_preview_dialog."
-        "SwitchListService.get_switch_list_rows",
-        lambda _session_id: [row],
+        (
+            "modelrailroadops.ui.switch_list."
+            "switch_list_preview_dialog."
+            "SwitchListService.get_switch_list_rows"
+        ),
+        lambda _session_id, train_id=None: [row],
     )
+
     monkeypatch.setattr(
-        "modelrailroadops.ui.switch_list.switch_list_preview_dialog."
-        "SwitchListService.get_pickup_rows",
-        lambda _session_id: [row],
+        (
+            "modelrailroadops.ui.switch_list."
+            "switch_list_preview_dialog."
+            "SwitchListService.get_pickup_rows"
+        ),
+        lambda _session_id, train_id=None: [row],
     )
+
     monkeypatch.setattr(
-        "modelrailroadops.ui.switch_list.switch_list_preview_dialog."
-        "SwitchListService.get_setout_rows",
-        lambda _session_id: [row],
+        (
+            "modelrailroadops.ui.switch_list."
+            "switch_list_preview_dialog."
+            "SwitchListService.get_setout_rows"
+        ),
+        lambda _session_id, train_id=None: [row],
     )
 
     dialog = SwitchListPreviewDialog(
@@ -144,8 +238,14 @@ def test_switch_list_preview_builds_printable_escaped_html(qapp, monkeypatch):
         "Session <One>",
         "2026-09-02",
     )
-    html = dialog.preview_text.toHtml()
-    plain_text = dialog.preview_text.toPlainText()
+
+    html = (
+        dialog.preview_text.toHtml()
+    )
+
+    plain_text = (
+        dialog.preview_text.toPlainText()
+    )
 
     assert "Session &lt;One&gt;" in html
     assert "GN &lt;33103&gt;" in html
@@ -153,25 +253,179 @@ def test_switch_list_preview_builds_printable_escaped_html(qapp, monkeypatch):
     assert "Total Moves: 1" in plain_text
     assert "Stop 1" in plain_text
     assert "Stop 3" in plain_text
+    assert "All Trains" in plain_text
+
+    dialog.close()
+
+
+def test_switch_list_preview_passes_selected_train_filter(
+    qapp,
+    monkeypatch,
+):
+    calls = {
+        "all": [],
+        "pickup": [],
+        "setout": [],
+    }
+
+    def get_rows(
+        session_id,
+        train_id=None,
+    ):
+        calls["all"].append(
+            (
+                session_id,
+                train_id,
+            )
+        )
+
+        return []
+
+    def get_pickups(
+        session_id,
+        train_id=None,
+    ):
+        calls["pickup"].append(
+            (
+                session_id,
+                train_id,
+            )
+        )
+
+        return []
+
+    def get_setouts(
+        session_id,
+        train_id=None,
+    ):
+        calls["setout"].append(
+            (
+                session_id,
+                train_id,
+            )
+        )
+
+        return []
+
+    monkeypatch.setattr(
+        (
+            "modelrailroadops.ui.switch_list."
+            "switch_list_preview_dialog."
+            "SwitchListService.get_switch_list_rows"
+        ),
+        get_rows,
+    )
+
+    monkeypatch.setattr(
+        (
+            "modelrailroadops.ui.switch_list."
+            "switch_list_preview_dialog."
+            "SwitchListService.get_pickup_rows"
+        ),
+        get_pickups,
+    )
+
+    monkeypatch.setattr(
+        (
+            "modelrailroadops.ui.switch_list."
+            "switch_list_preview_dialog."
+            "SwitchListService.get_setout_rows"
+        ),
+        get_setouts,
+    )
+
+    dialog = SwitchListPreviewDialog(
+        operations_session_id=8,
+        session_name="Weston Inbound",
+        session_date="2026-08-30",
+        train_id=5,
+        train_name="M255 - Weston Traffic",
+    )
+
+    plain_text = (
+        dialog.preview_text.toPlainText()
+    )
+
+    assert calls["all"] == [
+        (
+            8,
+            5,
+        ),
+    ]
+
+    assert calls["pickup"] == [
+        (
+            8,
+            5,
+        ),
+    ]
+
+    assert calls["setout"] == [
+        (
+            8,
+            5,
+        ),
+    ]
+
+    assert "M255 - Weston Traffic" in plain_text
+
     dialog.close()
 
 
 def test_print_dimensions_convert_inches_to_device_units():
-    assert WaybillPrintService.inches_to_printer_units(3.75, 300) == 1125
-    assert WaybillPrintService.inches_to_printer_units(4.00, 300) == 1200
+    assert (
+        WaybillPrintService.inches_to_printer_units(
+            3.75,
+            300,
+        )
+        == 1125
+    )
+
+    assert (
+        WaybillPrintService.inches_to_printer_units(
+            4.00,
+            300,
+        )
+        == 1200
+    )
 
 
-def test_car_image_lookup_accepts_case_insensitive_png_name(tmp_path, monkeypatch):
-    image_directory = tmp_path / "data" / "Car_Images"
-    image_directory.mkdir(parents=True)
-    expected_path = image_directory / "rpdx_8181.PNG"
-    expected_path.write_bytes(b"test image placeholder")
+def test_car_image_lookup_accepts_case_insensitive_png_name(
+    tmp_path,
+    monkeypatch,
+):
+    image_directory = (
+        tmp_path
+        / "data"
+        / "Car_Images"
+    )
+
+    image_directory.mkdir(
+        parents=True
+    )
+
+    expected_path = (
+        image_directory
+        / "rpdx_8181.PNG"
+    )
+
+    expected_path.write_bytes(
+        b"test image placeholder"
+    )
+
     monkeypatch.setattr(
         WaybillFormRenderer,
         "_project_root",
-        staticmethod(lambda: tmp_path),
+        staticmethod(
+            lambda: tmp_path
+        ),
     )
 
-    result = WaybillFormRenderer.find_car_image_path("RPDX", "8181")
+    result = (
+        WaybillFormRenderer.find_car_image_path(
+            "RPDX",
+            "8181",
+        )
+    )
 
     assert result == expected_path

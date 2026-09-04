@@ -41,10 +41,16 @@ class CarMoveGenerationService:
     location, with the origin occurring before the
     destination.
 
-    Route stops and Waybills are matched by structured
-    Location and Track identity when available. Industry
-    identity and normalized location text remain as
-    fallbacks for legacy data.
+    Route stops and Waybills are matched primarily by
+    structured Location identity when available.
+
+    A TrainRoute stop represents service to the entire
+    railroad Location. The specific LocationTrack selected
+    by a Waybill determines the actual pickup or setout
+    track and does not restrict route matching.
+
+    Industry identity and normalized location text remain
+    as fallbacks for legacy data.
 
     Existing CarMoves for the same Operations Session
     and Waybill are not duplicated.
@@ -181,16 +187,26 @@ class CarMoveGenerationService:
             )
 
     @staticmethod
-    def get_location_name(location_id):
+    def get_location_name(
+        location_id,
+    ):
 
         if location_id is None:
+
             return ""
 
         with SessionLocal() as session:
 
-            location = session.get(Location, location_id)
+            location = session.get(
+                Location,
+                location_id,
+            )
 
-            return location.name if location is not None else ""
+            return (
+                location.name
+                if location is not None
+                else ""
+            )
 
     #
     # Get destination location.
@@ -236,11 +252,14 @@ class CarMoveGenerationService:
 
         if destination_location_id is not None:
 
-            location_name = CarMoveGenerationService.get_location_name(
-                destination_location_id
+            location_name = (
+                CarMoveGenerationService.get_location_name(
+                    destination_location_id
+                )
             )
 
             if location_name:
+
                 return location_name
 
         return (
@@ -296,11 +315,14 @@ class CarMoveGenerationService:
 
         if origin_location_id is not None:
 
-            location_name = CarMoveGenerationService.get_location_name(
-                origin_location_id
+            location_name = (
+                CarMoveGenerationService.get_location_name(
+                    origin_location_id
+                )
             )
 
             if location_name:
+
                 return location_name
 
         return (
@@ -336,9 +358,19 @@ class CarMoveGenerationService:
     # Determine whether a TrainRoute matches
     # a Waybill location.
     #
-    # Structured Location and Track identity takes
-    # precedence, followed by Industry identity and then
-    # normalized text for legacy data.
+    # Structured Location identity takes precedence.
+    #
+    # A TrainRoute stop represents service to the entire
+    # Location. Therefore, when the route and Waybill have
+    # matching Location IDs, the route matches regardless
+    # of which LocationTrack the Waybill uses.
+    #
+    # This allows one train stop at a location such as
+    # Devin Fuel Distributors to serve multiple tracks,
+    # such as Fuel Loading and Propane Loading.
+    #
+    # Industry identity and normalized location text remain
+    # as fallbacks for legacy data.
     #
 
     @staticmethod
@@ -354,9 +386,15 @@ class CarMoveGenerationService:
 
             return False
 
-        # Structured Location/Track identity takes precedence. A legacy
-        # route without a Track ID may still match its Location so existing
-        # route data remains usable.
+        #
+        # Structured Location identity takes precedence.
+        #
+        # If both the TrainRoute and Waybill identify the
+        # same Location, the route serves that Location.
+        #
+        # The Waybill's LocationTrack is intentionally not
+        # used to restrict route matching.
+        #
 
         if location_id is not None:
 
@@ -368,24 +406,15 @@ class CarMoveGenerationService:
 
             if route_location_id is not None:
 
-                if route_location_id != location_id:
-
-                    return False
-
-                route_track_id = getattr(
-                    route,
-                    "location_track_id",
-                    None,
+                return (
+                    route_location_id
+                    == location_id
                 )
 
-                if (
-                    location_track_id is not None
-                    and route_track_id is not None
-                ):
-
-                    return route_track_id == location_track_id
-
-                return True
+        #
+        # Fall back to Industry identity for older route
+        # and Waybill data.
+        #
 
         if industry_id is not None:
 
@@ -401,6 +430,11 @@ class CarMoveGenerationService:
                 route_industry_id
                 == industry_id
             )
+
+        #
+        # Fall back to normalized location text for
+        # legacy data.
+        #
 
         normalized_location = (
             CarMoveGenerationService.normalize_location(
@@ -467,7 +501,9 @@ class CarMoveGenerationService:
     # The first assigned train whose route contains
     # the origin before the destination is selected.
     #
-    # Structured Location/Track IDs are used when available.
+    # Structured Location IDs are used when available.
+    # LocationTrack IDs do not restrict route matching.
+    #
     # Industry IDs and location text support legacy data.
     #
 

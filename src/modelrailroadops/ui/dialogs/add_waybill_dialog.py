@@ -273,7 +273,10 @@ class AddWaybillDialog(QDialog):
             self.update_compatibility()
 
     def load_origin_spots(self):
-        self._load_spots(self.origin_track_combo, self.origin_spot_combo)
+        self._load_spots(
+            self.origin_track_combo,
+            self.origin_spot_combo,
+        )
 
     def load_destination_spots(self):
         self._load_spots(
@@ -285,7 +288,14 @@ class AddWaybillDialog(QDialog):
     def load_cars(self):
         self.car_combo.blockSignals(True)
         self.car_combo.clear()
+
         with SessionLocal() as session:
+            current_car_id = (
+                self.waybill.car_id
+                if self.waybill is not None
+                else None
+            )
+
             unfinished_waybill_filters = (
                 Waybill.car_id == Car.id,
                 Waybill.status.in_(["ACTIVE", "IN_PROGRESS"]),
@@ -308,39 +318,84 @@ class AddWaybillDialog(QDialog):
                 .order_by(Car.reporting_mark, Car.number)
             ).scalars().all()
 
+            car_ids = {
+                car.id
+                for car in cars
+            }
+
+            if (
+                current_car_id is not None
+                and current_car_id not in car_ids
+            ):
+                current_car = session.get(
+                    Car,
+                    current_car_id,
+                )
+
+                if current_car is not None:
+                    cars.append(current_car)
+                    cars.sort(
+                        key=lambda car: (
+                            (car.reporting_mark or "").casefold(),
+                            (car.number or "").casefold(),
+                        )
+                    )
+
             for car in cars:
                 text = f"{car.reporting_mark} {car.number}"
                 if car.car_type:
                     text += f" - {car.car_type}"
-                self.car_combo.addItem(text, car.id)
+
+                self.car_combo.addItem(
+                    text,
+                    car.id,
+                )
 
             if not cars:
-                self.car_combo.addItem("No unassigned cars available", None)
+                self.car_combo.addItem(
+                    "No unassigned cars available",
+                    None,
+                )
 
         self.car_combo.blockSignals(False)
 
     def load_operations_sessions(self):
         self.operations_session_combo.clear()
-        self.operations_session_combo.addItem("No Operations Session", None)
+        self.operations_session_combo.addItem(
+            "No Operations Session",
+            None,
+        )
+
         with SessionLocal() as session:
             sessions = session.execute(
                 select(OperationsSession)
-                .where(OperationsSession.status.in_(["PLANNED", "ACTIVE"]))
+                .where(
+                    OperationsSession.status.in_(
+                        ["PLANNED", "ACTIVE"]
+                    )
+                )
                 .order_by(
                     OperationsSession.session_date.desc(),
                     OperationsSession.name,
                 )
             ).scalars().all()
+
             for operations_session in sessions:
                 date_text = (
                     operations_session.session_date.strftime("%Y-%m-%d")
                     if operations_session.session_date is not None
                     else ""
                 )
+
                 text = operations_session.name
+
                 if date_text:
                     text += f" ({date_text})"
-                self.operations_session_combo.addItem(text, operations_session.id)
+
+                self.operations_session_combo.addItem(
+                    text,
+                    operations_session.id,
+                )
 
     def _select_endpoint(
         self,
@@ -353,36 +408,74 @@ class AddWaybillDialog(QDialog):
         track_loader,
         spot_loader,
     ):
-        location_index = location_combo.findData(location_id)
+        location_index = location_combo.findData(
+            location_id
+        )
+
         if location_index >= 0:
-            location_combo.setCurrentIndex(location_index)
+            location_combo.setCurrentIndex(
+                location_index
+            )
+
         track_loader()
-        track_index = track_combo.findData(track_id)
+
+        track_index = track_combo.findData(
+            track_id
+        )
+
         if track_index >= 0:
-            track_combo.setCurrentIndex(track_index)
+            track_combo.setCurrentIndex(
+                track_index
+            )
+
         spot_loader()
-        spot_index = spot_combo.findData(spot_id)
+
+        spot_index = spot_combo.findData(
+            spot_id
+        )
+
         if spot_index >= 0:
-            spot_combo.setCurrentIndex(spot_index)
+            spot_combo.setCurrentIndex(
+                spot_index
+            )
 
     def car_changed(self):
         car_id = self.car_combo.currentData()
+
         with SessionLocal() as session:
-            car = session.get(Car, car_id) if car_id is not None else None
-            self.car_type_label.setText(
-                car.car_type if car is not None and car.car_type else "Not specified"
+            car = (
+                session.get(Car, car_id)
+                if car_id is not None
+                else None
             )
+
+            self.car_type_label.setText(
+                car.car_type
+                if car is not None and car.car_type
+                else "Not specified"
+            )
+
             self.empty_weight_label.setText(
                 f"{car.empty_weight_lbs:,} lb"
-                if car is not None and car.empty_weight_lbs is not None
+                if (
+                    car is not None
+                    and car.empty_weight_lbs is not None
+                )
                 else "Not entered"
             )
+
             self.load_limit_label.setText(
                 f"{car.load_limit_lbs:,} lb"
-                if car is not None and car.load_limit_lbs is not None
+                if (
+                    car is not None
+                    and car.load_limit_lbs is not None
+                )
                 else "Not entered"
             )
-            self.update_car_image(car)
+
+            self.update_car_image(
+                car
+            )
 
             if (
                 car is not None
@@ -408,44 +501,87 @@ class AddWaybillDialog(QDialog):
         """Show gross pounds and short tons for the selected movement."""
 
         load_state = self.load_state_combo.currentData()
-        self.cargo_weight_edit.setEnabled(load_state == "LOADED")
+
+        self.cargo_weight_edit.setEnabled(
+            load_state == "LOADED"
+        )
 
         car_id = self.car_combo.currentData()
-        with SessionLocal() as session:
-            car = session.get(Car, car_id) if car_id is not None else None
 
-            if car is None or car.empty_weight_lbs is None:
+        with SessionLocal() as session:
+            car = (
+                session.get(Car, car_id)
+                if car_id is not None
+                else None
+            )
+
+            if (
+                car is None
+                or car.empty_weight_lbs is None
+            ):
                 self.gross_weight_label.setText(
                     "Enter Empty Weight on the Car Roster"
                 )
-                self.tonnage_label.setText("Not calculated")
+                self.tonnage_label.setText(
+                    "Not calculated"
+                )
                 return
 
             if load_state == "EMPTY":
-                gross_weight_lbs = car.empty_weight_lbs
+                gross_weight_lbs = (
+                    car.empty_weight_lbs
+                )
+
             elif load_state == "LOADED":
-                cargo_text = self.cargo_weight_edit.text().strip().replace(",", "")
+                cargo_text = (
+                    self.cargo_weight_edit.text()
+                    .strip()
+                    .replace(",", "")
+                )
 
                 try:
-                    cargo_weight_lbs = int(cargo_text)
+                    cargo_weight_lbs = int(
+                        cargo_text
+                    )
                 except ValueError:
-                    self.gross_weight_label.setText("Enter cargo weight")
-                    self.tonnage_label.setText("Not calculated")
+                    self.gross_weight_label.setText(
+                        "Enter cargo weight"
+                    )
+                    self.tonnage_label.setText(
+                        "Not calculated"
+                    )
                     return
 
                 if cargo_weight_lbs <= 0:
-                    self.gross_weight_label.setText("Enter cargo weight")
-                    self.tonnage_label.setText("Not calculated")
+                    self.gross_weight_label.setText(
+                        "Enter cargo weight"
+                    )
+                    self.tonnage_label.setText(
+                        "Not calculated"
+                    )
                     return
 
-                gross_weight_lbs = car.empty_weight_lbs + cargo_weight_lbs
+                gross_weight_lbs = (
+                    car.empty_weight_lbs
+                    + cargo_weight_lbs
+                )
+
             else:
-                self.gross_weight_label.setText("Select Loaded or Empty")
-                self.tonnage_label.setText("Not calculated")
+                self.gross_weight_label.setText(
+                    "Select Loaded or Empty"
+                )
+                self.tonnage_label.setText(
+                    "Not calculated"
+                )
                 return
 
-        self.gross_weight_label.setText(f"{gross_weight_lbs:,} lb")
-        self.tonnage_label.setText(f"{gross_weight_lbs / 2000.0:,.1f} short tons")
+        self.gross_weight_label.setText(
+            f"{gross_weight_lbs:,} lb"
+        )
+
+        self.tonnage_label.setText(
+            f"{gross_weight_lbs / 2000.0:,.1f} short tons"
+        )
 
     def update_car_image(self, car):
         """Show the selected car's Waybill image before the Waybill is saved."""
@@ -453,7 +589,9 @@ class AddWaybillDialog(QDialog):
         self.car_image_label.clear()
 
         if car is None:
-            self.car_image_label.setText("Select a car to preview its picture.")
+            self.car_image_label.setText(
+                "Select a car to preview its picture."
+            )
             self.car_image_label.setToolTip("")
             return
 
@@ -463,14 +601,23 @@ class AddWaybillDialog(QDialog):
         )
 
         if image_path is None:
-            self.car_image_label.setText("No picture available")
+            self.car_image_label.setText(
+                "No picture available"
+            )
             self.car_image_label.setToolTip("")
             return
 
-        pixmap = QPixmap(str(image_path))
+        pixmap = QPixmap(
+            str(image_path)
+        )
+
         if pixmap.isNull():
-            self.car_image_label.setText("Picture could not be loaded")
-            self.car_image_label.setToolTip(str(image_path))
+            self.car_image_label.setText(
+                "Picture could not be loaded"
+            )
+            self.car_image_label.setToolTip(
+                str(image_path)
+            )
             return
 
         self.car_image_label.setPixmap(
@@ -480,80 +627,170 @@ class AddWaybillDialog(QDialog):
                 Qt.SmoothTransformation,
             )
         )
-        self.car_image_label.setToolTip(str(image_path))
+
+        self.car_image_label.setToolTip(
+            str(image_path)
+        )
 
     def update_compatibility(self):
-        spot_id = self.destination_spot_combo.currentData()
-        car_id = self.car_combo.currentData()
+        spot_id = (
+            self.destination_spot_combo.currentData()
+        )
+
+        car_id = (
+            self.car_combo.currentData()
+        )
 
         if not self.destination_spot_combo.isEnabled():
-            self.allowed_car_type_label.setText("Not applicable")
+            self.allowed_car_type_label.setText(
+                "Not applicable"
+            )
             self.compatibility_label.setText(
                 "Compatible — this destination is a general track."
             )
             return
 
         if car_id is None or spot_id is None:
-            self.allowed_car_type_label.setText("—")
-            self.compatibility_label.setText("Select a car and destination spot.")
+            self.allowed_car_type_label.setText(
+                "—"
+            )
+            self.compatibility_label.setText(
+                "Select a car and destination spot."
+            )
             return
 
         with SessionLocal() as session:
-            car = session.get(Car, car_id)
-            spot = session.get(Spot, spot_id)
+            car = session.get(
+                Car,
+                car_id,
+            )
+
+            spot = session.get(
+                Spot,
+                spot_id,
+            )
 
             if car is None or spot is None:
-                self.allowed_car_type_label.setText("—")
-                self.compatibility_label.setText("Selection could not be found.")
+                self.allowed_car_type_label.setText(
+                    "—"
+                )
+                self.compatibility_label.setText(
+                    "Selection could not be found."
+                )
                 return
 
-            allowed = spot.allowed_car_type or ""
-            self.allowed_car_type_label.setText(allowed or "Any")
+            allowed = (
+                spot.allowed_car_type
+                or ""
+            )
+
+            self.allowed_car_type_label.setText(
+                allowed or "Any"
+            )
+
             if not allowed:
-                message = "Compatible — this spot accepts any car type."
+                message = (
+                    "Compatible — this spot accepts any car type."
+                )
             elif not car.car_type:
-                message = "Check required — the car has no car type."
-            elif car.car_type.strip().casefold() == allowed.strip().casefold():
+                message = (
+                    "Check required — the car has no car type."
+                )
+            elif (
+                car.car_type.strip().casefold()
+                == allowed.strip().casefold()
+            ):
                 message = "Compatible"
             else:
-                message = f"Not compatible — {car.car_type} does not match {allowed}."
-            self.compatibility_label.setText(message)
+                message = (
+                    f"Not compatible — {car.car_type} "
+                    f"does not match {allowed}."
+                )
+
+            self.compatibility_label.setText(
+                message
+            )
 
     def load_existing_waybill(self):
         self.loading_existing = True
+
         try:
-            car_index = self.car_combo.findData(self.waybill.car_id)
+            car_index = self.car_combo.findData(
+                self.waybill.car_id
+            )
+
             if car_index >= 0:
-                self.car_combo.setCurrentIndex(car_index)
+                self.car_combo.setCurrentIndex(
+                    car_index
+                )
 
-            session_index = self.operations_session_combo.findData(
-                self.waybill.operations_session_id
+            session_index = (
+                self.operations_session_combo.findData(
+                    self.waybill.operations_session_id
+                )
             )
+
             self.operations_session_combo.setCurrentIndex(
-                session_index if session_index >= 0 else 0
+                session_index
+                if session_index >= 0
+                else 0
             )
 
-            origin_location_id = getattr(self.waybill, "origin_location_id", None)
+            origin_location_id = getattr(
+                self.waybill,
+                "origin_location_id",
+                None,
+            )
+
             origin_track_id = getattr(
-                self.waybill, "origin_location_track_id", None
-            )
-            destination_location_id = getattr(
-                self.waybill, "destination_location_id", None
-            )
-            destination_track_id = getattr(
-                self.waybill, "destination_location_track_id", None
+                self.waybill,
+                "origin_location_track_id",
+                None,
             )
 
-            if origin_location_id is None and self.waybill.origin_industry:
-                origin_location_id = self.waybill.origin_industry.operating_location_id
-            if origin_track_id is None and self.waybill.origin_track:
-                origin_track_id = self.waybill.origin_track.operating_track_id
-            if destination_location_id is None and self.waybill.destination_industry:
+            destination_location_id = getattr(
+                self.waybill,
+                "destination_location_id",
+                None,
+            )
+
+            destination_track_id = getattr(
+                self.waybill,
+                "destination_location_track_id",
+                None,
+            )
+
+            if (
+                origin_location_id is None
+                and self.waybill.origin_industry
+            ):
+                origin_location_id = (
+                    self.waybill.origin_industry.operating_location_id
+                )
+
+            if (
+                origin_track_id is None
+                and self.waybill.origin_track
+            ):
+                origin_track_id = (
+                    self.waybill.origin_track.operating_track_id
+                )
+
+            if (
+                destination_location_id is None
+                and self.waybill.destination_industry
+            ):
                 destination_location_id = (
                     self.waybill.destination_industry.operating_location_id
                 )
-            if destination_track_id is None and self.waybill.destination_track:
-                destination_track_id = self.waybill.destination_track.operating_track_id
+
+            if (
+                destination_track_id is None
+                and self.waybill.destination_track
+            ):
+                destination_track_id = (
+                    self.waybill.destination_track.operating_track_id
+                )
 
             self._select_endpoint(
                 self.origin_location_combo,
@@ -565,6 +802,7 @@ class AddWaybillDialog(QDialog):
                 self.load_origin_tracks,
                 self.load_origin_spots,
             )
+
             self._select_endpoint(
                 self.destination_location_combo,
                 self.destination_track_combo,
@@ -575,73 +813,150 @@ class AddWaybillDialog(QDialog):
                 self.load_destination_tracks,
                 self.load_destination_spots,
             )
-            self.notes_edit.setPlainText(self.waybill.notes or "")
-            load_state_index = self.load_state_combo.findData(
-                getattr(self.waybill, "load_state", None)
+
+            self.notes_edit.setPlainText(
+                self.waybill.notes or ""
             )
+
+            load_state_index = (
+                self.load_state_combo.findData(
+                    getattr(
+                        self.waybill,
+                        "load_state",
+                        None,
+                    )
+                )
+            )
+
             self.load_state_combo.setCurrentIndex(
-                load_state_index if load_state_index >= 0 else 0
+                load_state_index
+                if load_state_index >= 0
+                else 0
             )
+
             self.commodity_edit.setText(
-                getattr(self.waybill, "commodity", None) or ""
+                getattr(
+                    self.waybill,
+                    "commodity",
+                    None,
+                )
+                or ""
             )
+
             cargo_weight_lbs = getattr(
                 self.waybill,
                 "cargo_weight_lbs",
                 None,
             )
+
             self.cargo_weight_edit.setText(
                 str(cargo_weight_lbs)
                 if cargo_weight_lbs not in (None, 0)
                 else ""
             )
+
         finally:
             self.loading_existing = False
             self.car_changed()
 
     def save(self):
-        car_id = self.car_combo.currentData()
-        origin_location_id = self.origin_location_combo.currentData()
-        origin_track_id = self.origin_track_combo.currentData()
-        destination_location_id = self.destination_location_combo.currentData()
-        destination_track_id = self.destination_track_combo.currentData()
+        car_id = (
+            self.car_combo.currentData()
+        )
+
+        origin_location_id = (
+            self.origin_location_combo.currentData()
+        )
+
+        origin_track_id = (
+            self.origin_track_combo.currentData()
+        )
+
+        destination_location_id = (
+            self.destination_location_combo.currentData()
+        )
+
+        destination_track_id = (
+            self.destination_track_combo.currentData()
+        )
 
         if car_id is None:
-            QMessageBox.warning(self, "Waybill", "Please select a car.")
-            return
-        if origin_location_id is None or origin_track_id is None:
             QMessageBox.warning(
-                self, "Waybill", "Please select an origin location and track."
-            )
-            return
-        if destination_location_id is None or destination_track_id is None:
-            QMessageBox.warning(
-                self, "Waybill", "Please select a destination location and track."
+                self,
+                "Waybill",
+                "Please select a car.",
             )
             return
 
-        origin_spot_id = self.origin_spot_combo.currentData()
-        destination_spot_id = self.destination_spot_combo.currentData()
-
-        if self.origin_spot_combo.isEnabled() and origin_spot_id is None:
+        if (
+            origin_location_id is None
+            or origin_track_id is None
+        ):
             QMessageBox.warning(
-                self, "Waybill", "Industry origins require an origin spot."
-            )
-            return
-        if self.destination_spot_combo.isEnabled() and destination_spot_id is None:
-            QMessageBox.warning(
-                self, "Waybill", "Industry destinations require a spot."
+                self,
+                "Waybill",
+                "Please select an origin location and track.",
             )
             return
 
-        load_state = self.load_state_combo.currentData()
+        if (
+            destination_location_id is None
+            or destination_track_id is None
+        ):
+            QMessageBox.warning(
+                self,
+                "Waybill",
+                "Please select a destination location and track.",
+            )
+            return
+
+        origin_spot_id = (
+            self.origin_spot_combo.currentData()
+        )
+
+        destination_spot_id = (
+            self.destination_spot_combo.currentData()
+        )
+
+        if (
+            self.origin_spot_combo.isEnabled()
+            and origin_spot_id is None
+        ):
+            QMessageBox.warning(
+                self,
+                "Waybill",
+                "Industry origins require an origin spot.",
+            )
+            return
+
+        if (
+            self.destination_spot_combo.isEnabled()
+            and destination_spot_id is None
+        ):
+            QMessageBox.warning(
+                self,
+                "Waybill",
+                "Industry destinations require a spot.",
+            )
+            return
+
+        load_state = (
+            self.load_state_combo.currentData()
+        )
+
         cargo_weight_lbs = None
 
         if load_state == "LOADED":
-            cargo_text = self.cargo_weight_edit.text().strip().replace(",", "")
+            cargo_text = (
+                self.cargo_weight_edit.text()
+                .strip()
+                .replace(",", "")
+            )
 
             try:
-                cargo_weight_lbs = int(cargo_text)
+                cargo_weight_lbs = int(
+                    cargo_text
+                )
             except ValueError:
                 QMessageBox.warning(
                     self,
@@ -649,8 +964,10 @@ class AddWaybillDialog(QDialog):
                     "Please enter a whole-number cargo weight in pounds.",
                 )
                 return
+
         elif load_state == "EMPTY":
             cargo_weight_lbs = 0
+
         elif self.waybill is None:
             QMessageBox.warning(
                 self,
@@ -659,27 +976,40 @@ class AddWaybillDialog(QDialog):
             )
             return
 
-        origin_location = self._location(origin_location_id)
+        origin_location = self._location(
+            origin_location_id
+        )
+
         values = {
             "car_id": car_id,
-            "operations_session_id": self.operations_session_combo.currentData(),
+            "operations_session_id": (
+                self.operations_session_combo.currentData()
+            ),
             "origin_location": origin_location.name,
             "destination_industry_id": None,
             "destination_track_id": None,
             "destination_spot_id": destination_spot_id,
-            "notes": self.notes_edit.toPlainText().strip() or None,
+            "notes": (
+                self.notes_edit.toPlainText().strip()
+                or None
+            ),
             "origin_location_id": origin_location_id,
             "origin_location_track_id": origin_track_id,
             "origin_spot_id": origin_spot_id,
             "destination_location_id": destination_location_id,
             "destination_location_track_id": destination_track_id,
             "load_state": load_state,
-            "commodity": self.commodity_edit.text().strip() or None,
+            "commodity": (
+                self.commodity_edit.text().strip()
+                or None
+            ),
             "cargo_weight_lbs": cargo_weight_lbs,
         }
 
         if self.waybill is None:
-            success, result = WaybillService.create(**values)
+            success, result = WaybillService.create(
+                **values
+            )
             title = "Add Waybill"
         else:
             success, result = WaybillService.update(
@@ -689,7 +1019,11 @@ class AddWaybillDialog(QDialog):
             title = "Edit Waybill"
 
         if not success:
-            QMessageBox.warning(self, title, str(result))
+            QMessageBox.warning(
+                self,
+                title,
+                str(result),
+            )
             return
 
         self.accept()
