@@ -11,6 +11,9 @@ from modelrailroadops.models.location_track import LocationTrack
 from modelrailroadops.models.operations_session import OperationsSession
 from modelrailroadops.models.train import Train
 from modelrailroadops.models.waybill import Waybill
+from modelrailroadops.services.car_location_service import (
+    CarLocationService,
+)
 from modelrailroadops.services.operations_session_service import (
     OperationsSessionService,
 )
@@ -186,6 +189,92 @@ def seed_general_track_waybill(
             "destination_location_id": weston.id,
             "destination_track_id": weston_track.id,
         }
+
+
+def test_direct_car_move_does_not_start_planned_session(
+    test_database,
+):
+    """
+    A physical car-location move must not implicitly start a
+    PLANNED Operations Session.
+
+    The Operations/Switch List workflow starts the session when
+    the first PICKUP instruction is completed.
+    """
+
+    record_ids = seed_general_track_waybill(
+        test_database
+    )
+
+    moved, message = (
+        CarLocationService.move_car_to_location_track_with_message(
+            record_ids["car_id"],
+            record_ids["destination_track_id"],
+            operations_session_id=(
+                record_ids["operations_session_id"]
+            ),
+        )
+    )
+
+    assert not moved
+    assert "planned" in message.casefold()
+
+    with test_database.SessionLocal() as session:
+
+        operations_session = session.get(
+            OperationsSession,
+            record_ids["operations_session_id"],
+        )
+
+        waybill = session.get(
+            Waybill,
+            record_ids["waybill_id"],
+        )
+
+        pickup = session.get(
+            CarMove,
+            record_ids["pickup_id"],
+        )
+
+        setout = session.get(
+            CarMove,
+            record_ids["setout_id"],
+        )
+
+        car = session.get(
+            Car,
+            record_ids["car_id"],
+        )
+
+        movement_count = session.scalar(
+            select(func.count())
+            .select_from(CarMovement)
+        )
+
+        assert operations_session.status == "PLANNED"
+
+        assert waybill.status == "ACTIVE"
+        assert waybill.completed_at is None
+
+        assert pickup.status == "PENDING"
+        assert pickup.completed_at is None
+
+        assert setout.status == "PENDING"
+        assert setout.completed_at is None
+
+        assert (
+            car.operating_location_id
+            == record_ids["source_location_id"]
+        )
+
+        assert (
+            car.operating_track_id
+            == record_ids["source_track_id"]
+        )
+
+        assert car.location == "Staging Yard - Eastbound"
+
+        assert movement_count == 0
 
 
 def test_pickup_starts_planned_session_and_marks_waybill_in_progress(
