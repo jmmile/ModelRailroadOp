@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     select,
@@ -918,7 +918,7 @@ class CarMoveService:
 
             move.status = "COMPLETED"
 
-            move.completed_at = datetime.utcnow()
+            move.completed_at = datetime.now(UTC).replace(tzinfo=None)
 
             #
             # A standalone call owns its transaction and

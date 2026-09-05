@@ -1,4 +1,5 @@
 from datetime import (
+    UTC,
     date,
     datetime,
 )
@@ -80,7 +81,7 @@ class OperationsSession(Base):
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=datetime.utcnow,
+        default=lambda: datetime.now(UTC).replace(tzinfo=None),
         nullable=False,
     )
 

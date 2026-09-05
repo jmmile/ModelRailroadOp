@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
@@ -376,7 +376,7 @@ class OperationsSessionService:
             operations_session.status = "COMPLETED"
 
             operations_session.completed_at = (
-                datetime.utcnow()
+                datetime.now(UTC).replace(tzinfo=None)
             )
 
             session.commit()

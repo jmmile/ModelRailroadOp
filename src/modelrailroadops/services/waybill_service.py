@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
@@ -788,7 +788,7 @@ class WaybillService:
                 return False, message
             waybill = db_session.get(Waybill, waybill_id)
             waybill.status = "COMPLETED"
-            waybill.completed_at = datetime.utcnow()
+            waybill.completed_at = datetime.now(UTC).replace(tzinfo=None)
             return True, waybill
         with SessionLocal() as session:
             success, result = WaybillService.complete(waybill_id, session)
@@ -814,7 +814,7 @@ class WaybillService:
                 return False, "Waybill is already archived."
 
             waybill.archived = True
-            waybill.archived_at = datetime.utcnow()
+            waybill.archived_at = datetime.now(UTC).replace(tzinfo=None)
 
             session.commit()
 
