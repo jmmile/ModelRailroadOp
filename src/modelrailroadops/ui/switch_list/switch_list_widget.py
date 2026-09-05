@@ -23,6 +23,10 @@ from modelrailroadops.models.operations_session import (
     OperationsSession,
 )
 
+from modelrailroadops.services.operations_session_service import (
+    OperationsSessionService,
+)
+
 from modelrailroadops.services.switch_list_move_service import (
     SwitchListMoveService,
 )
@@ -143,6 +147,22 @@ class SwitchListWidget(QWidget):
 
         session_layout.addWidget(
             self.complete_move_button
+        )
+
+        #
+        # Complete Session button
+        #
+
+        self.complete_session_button = QPushButton(
+            "Complete Session"
+        )
+
+        self.complete_session_button.setEnabled(
+            False
+        )
+
+        session_layout.addWidget(
+            self.complete_session_button
         )
 
         #
@@ -296,6 +316,10 @@ class SwitchListWidget(QWidget):
 
         self.complete_move_button.clicked.connect(
             self.complete_selected_move
+        )
+
+        self.complete_session_button.clicked.connect(
+            self.complete_selected_session
         )
 
         self.refresh_button.clicked.connect(
@@ -471,6 +495,14 @@ class SwitchListWidget(QWidget):
 
         self.complete_move_button.setEnabled(
             False
+        )
+
+        self.complete_session_button.setEnabled(
+            False
+        )
+
+        self.complete_session_button.setToolTip(
+            ""
         )
 
         self.status_label.setText(
@@ -670,6 +702,45 @@ class SwitchListWidget(QWidget):
         )
 
     #
+    #
+    # Update Operations Session completion state
+    #
+
+    def update_session_completion_state(
+        self,
+    ):
+        operations_session_id = (
+            self.session_combo.currentData()
+        )
+
+        if operations_session_id is None:
+            self.complete_session_button.setEnabled(
+                False
+            )
+
+            self.complete_session_button.setToolTip(
+                ""
+            )
+
+            return False
+
+        can_complete, message = (
+            OperationsSessionService.can_complete(
+                operations_session_id
+            )
+        )
+
+        self.complete_session_button.setEnabled(
+            can_complete
+        )
+
+        self.complete_session_button.setToolTip(
+            message or ""
+        )
+
+        return can_complete
+
+
     # Update status
     #
 
@@ -682,8 +753,8 @@ class SwitchListWidget(QWidget):
         )
 
         if train_id is None:
-            self.status_label.setText(
-                f"Switch List Status: {count} moves — All Trains"
+            status_text = (
+                f"Switch List Status: {count} moves - All Trains"
             )
 
         else:
@@ -691,11 +762,24 @@ class SwitchListWidget(QWidget):
                 self.train_combo.currentText()
             )
 
-            self.status_label.setText(
-                f"Switch List Status: {count} moves — {train_name}"
+            status_text = (
+                f"Switch List Status: {count} moves - {train_name}"
             )
 
-    #
+        session_ready = (
+            self.update_session_completion_state()
+        )
+
+        if session_ready:
+            status_text += (
+                " - Ready to Complete Session"
+            )
+
+        self.status_label.setText(
+            status_text
+        )
+
+
     # Load Switch List
     #
 
@@ -1008,6 +1092,90 @@ class SwitchListWidget(QWidget):
             "Move Completed",
             result_message,
         )
+
+    #
+    # Complete selected Operations Session
+    #
+
+    def complete_selected_session(
+        self,
+    ):
+        operations_session_id = (
+            self.session_combo.currentData()
+        )
+
+        if operations_session_id is None:
+            QMessageBox.warning(
+                self,
+                "No Operations Session Selected",
+                "Please select an Operations Session first.",
+            )
+
+            return
+
+        can_complete, message = (
+            OperationsSessionService.can_complete(
+                operations_session_id
+            )
+        )
+
+        if not can_complete:
+            QMessageBox.warning(
+                self,
+                "Session Cannot Be Completed",
+                message,
+            )
+
+            self.refresh()
+
+            return
+
+        session_name = (
+            self.session_combo.currentText()
+        )
+
+        confirmation_text = (
+            f"Complete {session_name}?"
+            "\n\nAll required Waybill work is ready for completion."
+            "\n\nThis will mark the Operations Session COMPLETED."
+        )
+
+        answer = QMessageBox.question(
+            self,
+            "Complete Operations Session",
+            confirmation_text,
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+
+        if answer != QMessageBox.Yes:
+            return
+
+        success, result = (
+            OperationsSessionService.complete(
+                operations_session_id
+            )
+        )
+
+        if not success:
+            QMessageBox.warning(
+                self,
+                "Session Completion Failed",
+                result,
+            )
+
+            self.refresh()
+
+            return
+
+        self.refresh()
+
+        QMessageBox.information(
+            self,
+            "Operations Session Completed",
+            f"Operations Session #{operations_session_id} has been completed.",
+        )
+
 
     #
     # Preview / Print Switch List
