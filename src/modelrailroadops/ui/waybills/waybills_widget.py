@@ -97,6 +97,40 @@ class WaybillsWidget(QWidget):
             "Refresh"
         )
 
+        self.archive_button = QPushButton(
+            "Archive Waybill"
+        )
+
+        self.restore_button = QPushButton(
+            "Restore Waybill"
+        )
+
+        self.view_label = QLabel(
+            "View:"
+        )
+
+        self.view_combo = QComboBox()
+
+        self.view_combo.addItem(
+            "Open",
+            "OPEN",
+        )
+
+        self.view_combo.addItem(
+            "Completed",
+            "COMPLETED",
+        )
+
+        self.view_combo.addItem(
+            "Archived",
+            "ARCHIVED",
+        )
+
+        self.view_combo.addItem(
+            "All",
+            "ALL",
+        )
+
         button_layout.addWidget(
             self.add_button
         )
@@ -127,6 +161,26 @@ class WaybillsWidget(QWidget):
 
         button_layout.addWidget(
             self.refresh_button
+        )
+
+        button_layout.addWidget(
+            self.archive_button
+        )
+
+        button_layout.addWidget(
+            self.restore_button
+        )
+
+        button_layout.addSpacing(
+            20
+        )
+
+        button_layout.addWidget(
+            self.view_label
+        )
+
+        button_layout.addWidget(
+            self.view_combo
         )
 
         button_layout.addStretch()
@@ -227,6 +281,18 @@ class WaybillsWidget(QWidget):
             self.refresh
         )
 
+        self.archive_button.clicked.connect(
+            self.archive_waybill
+        )
+
+        self.restore_button.clicked.connect(
+            self.restore_waybill
+        )
+
+        self.view_combo.currentIndexChanged.connect(
+            self.refresh
+        )
+
         self.table.doubleClicked.connect(
             self.preview_waybill
         )
@@ -243,9 +309,18 @@ class WaybillsWidget(QWidget):
 
     def refresh(
         self,
+        *_args,
     ):
 
-        self.model.refresh()
+        view = self.view_combo.currentData()
+
+        waybills = WaybillService.get_by_archive_view(
+            view
+        )
+
+        self.model.set_waybills(
+            waybills
+        )
 
         self.table.resizeColumnsToContents()
 
@@ -515,6 +590,62 @@ class WaybillsWidget(QWidget):
             QMessageBox.warning(
                 self,
                 "Cancel Waybill",
+                str(result),
+            )
+
+            return
+
+        self.refresh()
+
+    #
+    # Archive Waybill
+    #
+
+    def archive_waybill(
+        self,
+    ):
+
+        waybill = self.get_selected_waybill()
+
+        if waybill is None:
+            return
+
+        success, result = WaybillService.archive(
+            waybill.id
+        )
+
+        if not success:
+            QMessageBox.warning(
+                self,
+                "Archive Waybill",
+                str(result),
+            )
+
+            return
+
+        self.refresh()
+
+    #
+    # Restore Waybill
+    #
+
+    def restore_waybill(
+        self,
+    ):
+
+        waybill = self.get_selected_waybill()
+
+        if waybill is None:
+            return
+
+        success, result = WaybillService.restore_from_archive(
+            waybill.id
+        )
+
+        if not success:
+            QMessageBox.warning(
+                self,
+                "Restore Waybill",
                 str(result),
             )
 

@@ -282,6 +282,37 @@ def _upgrade_waybill_load_schema():
                 )
 
 
+
+def _upgrade_waybill_archive_schema():
+    """Add Waybill archive fields without changing existing Waybills."""
+
+    current_inspector = inspect(engine)
+
+    if not current_inspector.has_table("waybills"):
+        return
+
+    columns = {
+        column["name"]
+        for column in current_inspector.get_columns("waybills")
+    }
+
+    with engine.begin() as connection:
+        if "archived" not in columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE waybills "
+                    "ADD COLUMN archived BOOLEAN NOT NULL DEFAULT 0"
+                )
+            )
+
+        if "archived_at" not in columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE waybills "
+                    "ADD COLUMN archived_at DATETIME"
+                )
+            )
+
 def initialize_database():
     """
     Create all database tables and apply required migrations.
@@ -855,3 +886,4 @@ def initialize_database():
     # including yard, staging, and interchange tracks.
     _upgrade_waybill_location_schema()
     _upgrade_waybill_load_schema()
+    _upgrade_waybill_archive_schema()

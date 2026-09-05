@@ -174,6 +174,21 @@ class Waybill(Base):
         nullable=True,
     )
 
+
+    #
+    # Archive state.
+    #
+
+    archived: Mapped[bool] = mapped_column(
+        default=False,
+        nullable=False,
+    )
+
+    archived_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+    )
+
     @property
     def gross_weight_lbs(self):
         """Return the car's gross weight for this Waybill in pounds."""
@@ -285,3 +300,4 @@ class Waybill(Base):
         "Spot",
         foreign_keys=[destination_spot_id],
     )
+

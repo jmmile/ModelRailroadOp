@@ -104,3 +104,140 @@ def test_car_cannot_receive_two_unfinished_waybills(test_database):
     with test_database.SessionLocal() as session:
         waybill_count = session.scalar(select(func.count()).select_from(Waybill))
         assert waybill_count == 1
+
+def test_completed_waybill_can_be_archived_and_restored(test_database):
+    with test_database.SessionLocal() as session:
+        car = Car(
+            reporting_mark="TEST",
+            number="3001",
+            owner="Test Railroad",
+            car_type="Boxcar",
+            status="AVAILABLE",
+            location="Test Location",
+        )
+
+        waybill = Waybill(
+            car=car,
+            origin_location="Test Origin",
+            status="COMPLETED",
+            completed_at=date(2026, 9, 1),
+        )
+
+        session.add(waybill)
+        session.commit()
+
+        waybill_id = waybill.id
+
+    success, archived_waybill = WaybillService.archive(
+        waybill_id
+    )
+
+    assert success
+    assert archived_waybill.archived is True
+    assert archived_waybill.archived_at is not None
+    assert archived_waybill.status == "COMPLETED"
+
+    success, restored_waybill = WaybillService.restore_from_archive(
+        waybill_id
+    )
+
+    assert success
+    assert restored_waybill.archived is False
+    assert restored_waybill.archived_at is None
+    assert restored_waybill.status == "COMPLETED"
+
+
+def test_unfinished_waybill_cannot_be_archived(test_database):
+    with test_database.SessionLocal() as session:
+        car = Car(
+            reporting_mark="TEST",
+            number="3002",
+            owner="Test Railroad",
+            car_type="Boxcar",
+            status="AVAILABLE",
+            location="Test Location",
+        )
+
+        waybill = Waybill(
+            car=car,
+            origin_location="Test Origin",
+            status="ACTIVE",
+        )
+
+        session.add(waybill)
+        session.commit()
+
+        waybill_id = waybill.id
+
+    success, message = WaybillService.archive(
+        waybill_id
+    )
+
+    assert not success
+    assert message == "Only a completed waybill can be archived."
+
+
+def test_archive_rejects_already_archived_waybill(test_database):
+    with test_database.SessionLocal() as session:
+        car = Car(
+            reporting_mark="TEST",
+            number="3003",
+            owner="Test Railroad",
+            car_type="Boxcar",
+            status="AVAILABLE",
+            location="Test Location",
+        )
+
+        waybill = Waybill(
+            car=car,
+            origin_location="Test Origin",
+            status="COMPLETED",
+        )
+
+        session.add(waybill)
+        session.commit()
+
+        waybill_id = waybill.id
+
+    success, result = WaybillService.archive(
+        waybill_id
+    )
+    assert success, result
+
+    success, message = WaybillService.archive(
+        waybill_id
+    )
+
+    assert not success
+    assert message == "Waybill is already archived."
+
+
+def test_restore_rejects_non_archived_waybill(test_database):
+    with test_database.SessionLocal() as session:
+        car = Car(
+            reporting_mark="TEST",
+            number="3004",
+            owner="Test Railroad",
+            car_type="Boxcar",
+            status="AVAILABLE",
+            location="Test Location",
+        )
+
+        waybill = Waybill(
+            car=car,
+            origin_location="Test Origin",
+            status="COMPLETED",
+        )
+
+        session.add(waybill)
+        session.commit()
+
+        waybill_id = waybill.id
+
+    success, message = WaybillService.restore_from_archive(
+        waybill_id
+    )
+
+    assert not success
+    assert message == "Waybill is not archived."
+

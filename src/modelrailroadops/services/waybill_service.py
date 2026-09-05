@@ -644,6 +644,49 @@ class WaybillService:
             ).scalars().all()
 
     @staticmethod
+    def get_by_archive_view(view="OPEN"):
+        normalized_view = str(view or "OPEN").strip().upper()
+
+        if normalized_view not in {
+            "OPEN",
+            "COMPLETED",
+            "ARCHIVED",
+            "ALL",
+        }:
+            normalized_view = "OPEN"
+
+        with SessionLocal() as session:
+            statement = (
+                select(Waybill)
+                .options(*WaybillService._waybill_load_options())
+                .order_by(
+                    Waybill.created_at.desc(),
+                    Waybill.id.desc(),
+                )
+            )
+
+            if normalized_view == "OPEN":
+                statement = statement.where(
+                    Waybill.status.in_(["ACTIVE", "IN_PROGRESS"]),
+                    Waybill.archived.is_(False),
+                )
+
+            elif normalized_view == "COMPLETED":
+                statement = statement.where(
+                    Waybill.status == "COMPLETED",
+                    Waybill.archived.is_(False),
+                )
+
+            elif normalized_view == "ARCHIVED":
+                statement = statement.where(
+                    Waybill.archived.is_(True),
+                )
+
+            return session.execute(
+                statement
+            ).scalars().all()
+
+    @staticmethod
     def get_by_id(waybill_id):
         with SessionLocal() as session:
             return WaybillService._load_waybill(session, waybill_id)
@@ -753,6 +796,53 @@ class WaybillService:
                 return False, result
             session.commit()
             return True, WaybillService._load_waybill(session, waybill_id)
+
+    @staticmethod
+    def archive(waybill_id):
+        with SessionLocal() as session:
+            waybill = session.get(Waybill, waybill_id)
+
+            if waybill is None:
+                return False, "Waybill not found."
+
+            if waybill.status != "COMPLETED":
+                return False, (
+                    "Only a completed waybill can be archived."
+                )
+
+            if waybill.archived:
+                return False, "Waybill is already archived."
+
+            waybill.archived = True
+            waybill.archived_at = datetime.utcnow()
+
+            session.commit()
+
+            return True, WaybillService._load_waybill(
+                session,
+                waybill.id,
+            )
+
+    @staticmethod
+    def restore_from_archive(waybill_id):
+        with SessionLocal() as session:
+            waybill = session.get(Waybill, waybill_id)
+
+            if waybill is None:
+                return False, "Waybill not found."
+
+            if not waybill.archived:
+                return False, "Waybill is not archived."
+
+            waybill.archived = False
+            waybill.archived_at = None
+
+            session.commit()
+
+            return True, WaybillService._load_waybill(
+                session,
+                waybill.id,
+            )
 
     @staticmethod
     def cancel(waybill_id):
