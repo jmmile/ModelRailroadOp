@@ -460,6 +460,86 @@ def test_passenger_operator_sheet_combines_ordered_assignment_data(
     dialog.close()
 
 
+def test_passenger_operator_sheet_prints_displayed_document(
+    qapp,
+    monkeypatch,
+):
+    module = "modelrailroadops.ui.operations.passenger_operator_sheet_preview_dialog"
+    monkeypatch.setattr(
+        f"{module}.OperationsSessionTrainLocomotiveService."
+        "get_by_operations_session_train",
+        lambda assignment_id: [],
+    )
+    monkeypatch.setattr(
+        f"{module}.OperationsSessionTrainPassengerCarService."
+        "get_by_operations_session_train",
+        lambda assignment_id: [],
+    )
+    monkeypatch.setattr(
+        f"{module}.TrainRouteService.get_by_train",
+        lambda train_id: [],
+    )
+
+    printed = {}
+
+    class FakePrinter:
+        HighResolution = object()
+
+        def __init__(self, mode):
+            printed["printer"] = self
+            printed["mode"] = mode
+
+        def setDocName(self, name):
+            printed["document_name"] = name
+
+    class FakePrintDialog:
+        Accepted = 1
+
+        def __init__(self, printer, parent):
+            printed["dialog_printer"] = printer
+            printed["dialog_parent"] = parent
+
+        def exec(self):
+            return self.Accepted
+
+    class FakeDocument:
+        def setHtml(self, html):
+            printed["html"] = html
+
+        def setDefaultFont(self, font):
+            printed["font"] = font
+
+        def print_(self, printer):
+            printed["printed_with"] = printer
+
+    monkeypatch.setattr(f"{module}.QPrinter", FakePrinter)
+    monkeypatch.setattr(f"{module}.QPrintDialog", FakePrintDialog)
+    monkeypatch.setattr(f"{module}.QTextDocument", FakeDocument)
+    monkeypatch.setattr(f"{module}.QMessageBox.information", lambda *args: None)
+
+    train = SimpleNamespace(id=7, symbol="P12", name="Morning Limited")
+    dialog = PassengerOperatorSheetPreviewDialog(
+        19,
+        train,
+        "Sunday Passenger Session",
+        "2026-09-07",
+    )
+    displayed_html = dialog.preview_text.toHtml()
+
+    dialog.print_operator_sheet()
+
+    assert dialog.print_button.text() == "Print"
+    assert printed["document_name"] == (
+        "Model Railroad Operations Passenger Train Operator Sheet - "
+        "P12 - Morning Limited"
+    )
+    assert printed["html"] == displayed_html
+    assert printed["dialog_printer"] is printed["printer"]
+    assert printed["printed_with"] is printed["printer"]
+
+    dialog.close()
+
+
 def test_print_dimensions_convert_inches_to_device_units():
     assert (
         WaybillPrintService.inches_to_printer_units(

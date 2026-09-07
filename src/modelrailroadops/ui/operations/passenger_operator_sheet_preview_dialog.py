@@ -1,11 +1,14 @@
 from html import escape
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QTextDocument
+from PySide6.QtPrintSupport import QPrintDialog, QPrinter
 from PySide6.QtWidgets import (
     QDialog,
-    QDialogButtonBox,
+    QHBoxLayout,
     QLabel,
+    QMessageBox,
+    QPushButton,
     QTextEdit,
     QVBoxLayout,
 )
@@ -55,9 +58,16 @@ class PassengerOperatorSheetPreviewDialog(QDialog):
         self.preview_text.setAcceptRichText(True)
         layout.addWidget(self.preview_text)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Close)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
+        button_layout = QHBoxLayout()
+        self.print_button = QPushButton("Print")
+        self.close_button = QPushButton("Close")
+        button_layout.addWidget(self.print_button)
+        button_layout.addStretch()
+        button_layout.addWidget(self.close_button)
+        layout.addLayout(button_layout)
+
+        self.print_button.clicked.connect(self.print_operator_sheet)
+        self.close_button.clicked.connect(self.accept)
 
         self.refresh_preview()
 
@@ -180,3 +190,43 @@ class PassengerOperatorSheetPreviewDialog(QDialog):
             "</body></html>",
         ]
         self.preview_text.setHtml("".join(html))
+
+    def print_operator_sheet(self):
+        printer = QPrinter(QPrinter.HighResolution)
+        train_identity = (
+            " - ".join(part for part in (self.train.symbol, self.train.name) if part)
+            or f"Train {self.train.id}"
+        )
+        printer.setDocName(
+            "Model Railroad Operations "
+            f"Passenger Train Operator Sheet - {train_identity}"
+        )
+
+        print_dialog = QPrintDialog(printer, self)
+        if print_dialog.exec() != QPrintDialog.Accepted:
+            return
+
+        document = QTextDocument()
+        document.setHtml(self.preview_text.toHtml())
+        default_font = QFont("Arial")
+        default_font.setPointSize(10)
+        document.setDefaultFont(default_font)
+
+        try:
+            document.print_(printer)
+        except Exception as error:  # noqa: BLE001
+            QMessageBox.critical(
+                self,
+                "Print Error",
+                (
+                    "The passenger train operator sheet could not be printed."
+                    f"\n\n{error}"
+                ),
+            )
+            return
+
+        QMessageBox.information(
+            self,
+            "Print Complete",
+            "The passenger train operator sheet was sent to the printer.",
+        )
