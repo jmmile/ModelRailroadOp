@@ -1,7 +1,3 @@
-from PySide6.QtCore import (
-    Qt,
-)
-
 from PySide6.QtGui import (
     QStandardItem,
     QStandardItemModel,
@@ -13,13 +9,13 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QHBoxLayout,
     QHeaderView,
     QLabel,
     QMessageBox,
     QPushButton,
     QTableView,
     QVBoxLayout,
-    QHBoxLayout,
     QWidget,
 )
 
@@ -75,6 +71,10 @@ from modelrailroadops.ui.operations.car_move_table_model import (
 
 from modelrailroadops.ui.operations.operations_session_table_model import (
     OperationsSessionTableModel,
+)
+
+from modelrailroadops.ui.operations.passenger_operator_sheet_preview_dialog import (
+    PassengerOperatorSheetPreviewDialog,
 )
 
 from modelrailroadops.ui.styles import (
@@ -646,6 +646,10 @@ class OperationsSessionsWidget(QWidget):
             "Refresh Trains"
         )
 
+        self.passenger_operator_sheet_button = QPushButton(
+            "Passenger Operator Sheet"
+        )
+
         train_button_layout.addWidget(
             self.add_train_button
         )
@@ -656,6 +660,10 @@ class OperationsSessionsWidget(QWidget):
 
         train_button_layout.addWidget(
             self.refresh_trains_button
+        )
+
+        train_button_layout.addWidget(
+            self.passenger_operator_sheet_button
         )
 
         train_button_layout.addStretch()
@@ -1173,6 +1181,10 @@ class OperationsSessionsWidget(QWidget):
             self.refresh_trains
         )
 
+        self.passenger_operator_sheet_button.clicked.connect(
+            self.preview_passenger_operator_sheet
+        )
+
         self.add_locomotive_button.clicked.connect(
             self.add_locomotive
         )
@@ -1238,6 +1250,10 @@ class OperationsSessionsWidget(QWidget):
         )
 
         self.train_table_model_data = []
+
+        self.passenger_operator_sheet_button.setEnabled(
+            False
+        )
 
         self.refresh()
 
@@ -1494,6 +1510,10 @@ class OperationsSessionsWidget(QWidget):
 
         if train_id is None:
 
+            self.passenger_operator_sheet_button.setEnabled(
+                False
+            )
+
             self.clear_route()
             self.clear_locomotives()
             self.clear_passenger_cars()
@@ -1525,6 +1545,10 @@ class OperationsSessionsWidget(QWidget):
             == "PASSENGER"
         ):
 
+            self.passenger_operator_sheet_button.setEnabled(
+                True
+            )
+
             self.passenger_consist_widget.setVisible(
                 True
             )
@@ -1535,6 +1559,10 @@ class OperationsSessionsWidget(QWidget):
 
         else:
 
+            self.passenger_operator_sheet_button.setEnabled(
+                False
+            )
+
             self.clear_passenger_cars()
 
             self.passenger_consist_widget.setVisible(
@@ -1542,6 +1570,56 @@ class OperationsSessionsWidget(QWidget):
             )
 
         self.update_train_weight_summary()
+
+    def preview_passenger_operator_sheet(
+        self,
+    ):
+
+        operations_session = (
+            self.get_selected_session_without_message()
+        )
+
+        assignment_id = (
+            self.get_selected_train_assignment_id_without_message()
+        )
+
+        train = self.get_train(
+            self.get_selected_train_id()
+        )
+
+        if (
+            operations_session is None
+            or assignment_id is None
+            or train is None
+        ):
+
+            QMessageBox.information(
+                self,
+                "Passenger Operator Sheet",
+                "Please select a passenger train assignment.",
+            )
+
+            return
+
+        if (train.train_type or "").strip().upper() != "PASSENGER":
+
+            QMessageBox.information(
+                self,
+                "Passenger Operator Sheet",
+                "Operator sheets are available only for passenger trains.",
+            )
+
+            return
+
+        dialog = PassengerOperatorSheetPreviewDialog(
+            assignment_id,
+            train,
+            operations_session.name,
+            operations_session.session_date,
+            self,
+        )
+
+        dialog.exec()
 
     def get_selected_train_id(
         self,

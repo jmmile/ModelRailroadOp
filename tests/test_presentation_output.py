@@ -1,4 +1,5 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time
+from types import SimpleNamespace
 
 import pytest
 from PySide6.QtCore import Qt
@@ -6,6 +7,9 @@ from PySide6.QtCore import Qt
 from modelrailroadops.models.car import Car
 from modelrailroadops.models.waybill import Waybill
 from modelrailroadops.services.waybill_print_services import WaybillPrintService
+from modelrailroadops.ui.operations.passenger_operator_sheet_preview_dialog import (
+    PassengerOperatorSheetPreviewDialog,
+)
 from modelrailroadops.ui.switch_list.switch_list_preview_dialog import (
     SwitchListPreviewDialog,
 )
@@ -368,6 +372,90 @@ def test_switch_list_preview_passes_selected_train_filter(
     ]
 
     assert "M255 - Weston Traffic" in plain_text
+
+    dialog.close()
+
+
+def test_passenger_operator_sheet_combines_ordered_assignment_data(
+    qapp,
+    monkeypatch,
+):
+    locomotive = SimpleNamespace(
+        reporting_mark="RPDX",
+        number="101",
+        model="F7A <Lead>",
+        locomotive_type="Diesel",
+    )
+    passenger_car = SimpleNamespace(
+        reporting_mark="RPDX",
+        number="201",
+        name="Silver & Gold",
+        equipment_type="Coach",
+    )
+    route = SimpleNamespace(
+        sequence=1,
+        location="Weston",
+        operating_location=SimpleNamespace(name="Weston <Station>"),
+        operating_track=SimpleNamespace(name="Main & Platform"),
+        arrival_time=time(9, 5),
+        departure_time=time(9, 12),
+    )
+
+    monkeypatch.setattr(
+        (
+            "modelrailroadops.ui.operations."
+            "passenger_operator_sheet_preview_dialog."
+            "OperationsSessionTrainLocomotiveService."
+            "get_by_operations_session_train"
+        ),
+        lambda assignment_id: [
+            SimpleNamespace(sequence=1, locomotive=locomotive)
+        ],
+    )
+    monkeypatch.setattr(
+        (
+            "modelrailroadops.ui.operations."
+            "passenger_operator_sheet_preview_dialog."
+            "OperationsSessionTrainPassengerCarService."
+            "get_by_operations_session_train"
+        ),
+        lambda assignment_id: [
+            SimpleNamespace(sequence=1, passenger_car=passenger_car)
+        ],
+    )
+    monkeypatch.setattr(
+        (
+            "modelrailroadops.ui.operations."
+            "passenger_operator_sheet_preview_dialog."
+            "TrainRouteService.get_by_train"
+        ),
+        lambda train_id: [route],
+    )
+
+    train = SimpleNamespace(
+        id=7,
+        symbol="P12",
+        name="Morning <Limited>",
+    )
+    dialog = PassengerOperatorSheetPreviewDialog(
+        19,
+        train,
+        "Sunday & Holiday",
+        "2026-09-07",
+    )
+
+    html = dialog.preview_text.toHtml()
+    plain_text = dialog.preview_text.toPlainText()
+
+    assert "P12 - Morning &lt;Limited&gt;" in html
+    assert "RPDX 101" in plain_text
+    assert "F7A &lt;Lead&gt;" in html
+    assert "RPDX 201" in plain_text
+    assert "Silver &amp; Gold" in html
+    assert "Weston &lt;Station&gt;" in html
+    assert "Main &amp; Platform" in html
+    assert "9:05 AM" in plain_text
+    assert "9:12 AM" in plain_text
 
     dialog.close()
 

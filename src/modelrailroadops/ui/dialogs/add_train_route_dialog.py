@@ -1,5 +1,4 @@
-from PySide6.QtCore import QTime
-
+from PySide6.QtCore import QEvent, Qt, QTime
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -17,6 +16,28 @@ from PySide6.QtWidgets import (
 
 from modelrailroadops.services.location_service import LocationService
 from modelrailroadops.services.train_route_service import TrainRouteService
+
+
+class RouteStopTimeEdit(QTimeEdit):
+    """Start click-to-type edits at the beginning of the time value."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.lineEdit().installEventFilter(self)
+
+    def eventFilter(self, watched, event):
+        if (
+            watched is self.lineEdit()
+            and event.type() == QEvent.MouseButtonRelease
+            and event.button() == Qt.LeftButton
+        ):
+            self.setCurrentSection(QTimeEdit.HourSection)
+            self.lineEdit().setSelection(
+                0,
+                len(self.sectionText(QTimeEdit.HourSection)),
+            )
+
+        return super().eventFilter(watched, event)
 
 
 class AddTrainRouteDialog(QDialog):
@@ -79,7 +100,7 @@ class AddTrainRouteDialog(QDialog):
             "Scheduled"
         )
 
-        self.arrival_time_edit = QTimeEdit()
+        self.arrival_time_edit = RouteStopTimeEdit()
 
         self.arrival_time_edit.setDisplayFormat(
             "h:mm AP"
@@ -107,7 +128,7 @@ class AddTrainRouteDialog(QDialog):
             "Scheduled"
         )
 
-        self.departure_time_edit = QTimeEdit()
+        self.departure_time_edit = RouteStopTimeEdit()
 
         self.departure_time_edit.setDisplayFormat(
             "h:mm AP"
