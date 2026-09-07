@@ -41,6 +41,10 @@ from modelrailroadops.services.locomotive_service import (
     LocomotiveService,
 )
 
+from modelrailroadops.services.passenger_car_service import (
+    PassengerCarService,
+)
+
 from modelrailroadops.services.operations_session_service import (
     OperationsSessionService,
 )
@@ -51,6 +55,10 @@ from modelrailroadops.services.operations_session_train_service import (
 
 from modelrailroadops.services.operations_session_train_locomotive_service import (
     OperationsSessionTrainLocomotiveService,
+)
+
+from modelrailroadops.services.operations_session_train_passenger_car_service import (
+    OperationsSessionTrainPassengerCarService,
 )
 
 from modelrailroadops.services.train_route_service import (
@@ -120,7 +128,7 @@ class AssignTrainDialog(QDialog):
 
         form_layout.addRow(
             "Train:",
-            self.train_combo
+            self.train_combo,
         )
 
         layout.addLayout(
@@ -339,12 +347,159 @@ class AssignLocomotiveDialog(QDialog):
         return self.locomotive_combo.currentData()
 
 
+class AssignPassengerCarDialog(QDialog):
+    """
+    Dialog used to assign a passenger car to a
+    passenger Train within an Operations Session.
+    """
+
+    def __init__(
+        self,
+        operations_session_train_id,
+        parent=None,
+    ):
+
+        super().__init__(
+            parent
+        )
+
+        self.operations_session_train_id = (
+            operations_session_train_id
+        )
+
+        self.setWindowTitle(
+            "Assign Passenger Car"
+        )
+
+        self.setModal(
+            True
+        )
+
+        self.resize(
+            575,
+            150,
+        )
+
+        layout = QVBoxLayout(
+            self
+        )
+
+        form_layout = QFormLayout()
+
+        self.passenger_car_combo = QComboBox()
+
+        self.load_passenger_cars()
+
+        form_layout.addRow(
+            "Passenger Car:",
+            self.passenger_car_combo,
+        )
+
+        layout.addLayout(
+            form_layout
+        )
+
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.Ok
+            | QDialogButtonBox.Cancel
+        )
+
+        button_box.accepted.connect(
+            self.accept
+        )
+
+        button_box.rejected.connect(
+            self.reject
+        )
+
+        layout.addWidget(
+            button_box
+        )
+
+    def load_passenger_cars(
+        self,
+    ):
+
+        existing_assignments = (
+            OperationsSessionTrainPassengerCarService
+            .get_by_operations_session_train(
+                self.operations_session_train_id
+            )
+        )
+
+        assigned_passenger_car_ids = {
+            assignment.passenger_car_id
+            for assignment in existing_assignments
+        }
+
+        passenger_cars = (
+            PassengerCarService.get_all()
+        )
+
+        for passenger_car in passenger_cars:
+
+            if passenger_car.id in assigned_passenger_car_ids:
+
+                continue
+
+            status = (
+                passenger_car.status
+                or ""
+            ).strip().upper()
+
+            if status == "OUT_OF_SERVICE":
+
+                continue
+
+            display_parts = [
+                (
+                    f"{passenger_car.reporting_mark} "
+                    f"{passenger_car.number}"
+                )
+            ]
+
+            if passenger_car.name:
+
+                display_parts.append(
+                    passenger_car.name
+                )
+
+            if passenger_car.equipment_type:
+
+                display_parts.append(
+                    passenger_car.equipment_type
+                )
+
+            if passenger_car.length is not None:
+
+                display_parts.append(
+                    f"{passenger_car.length} ft"
+                )
+
+            display = " - ".join(
+                display_parts
+            )
+
+            self.passenger_car_combo.addItem(
+                display,
+                passenger_car.id,
+            )
+
+    def get_passenger_car_id(
+        self,
+    ):
+
+        return self.passenger_car_combo.currentData()
+
+
 class OperationsSessionsWidget(QWidget):
 
     ASSIGNMENT_ID_ROLE = 32
     TRAIN_ID_ROLE = 33
     LOCOMOTIVE_ASSIGNMENT_ID_ROLE = 34
     LOCOMOTIVE_ID_ROLE = 35
+    PASSENGER_CAR_ASSIGNMENT_ID_ROLE = 36
+    PASSENGER_CAR_ID_ROLE = 37
 
     def __init__(
         self,
@@ -654,6 +809,121 @@ class OperationsSessionsWidget(QWidget):
         self.update_locomotive_table()
 
         #
+        # Passenger Consist
+        #
+
+        self.passenger_consist_widget = QWidget()
+
+        passenger_consist_layout = QVBoxLayout(
+            self.passenger_consist_widget
+        )
+
+        passenger_consist_layout.setContentsMargins(
+            0,
+            0,
+            0,
+            0,
+        )
+
+        self.passenger_consist_label = QLabel(
+            "Passenger Consist"
+        )
+
+        passenger_consist_layout.addWidget(
+            self.passenger_consist_label
+        )
+
+        passenger_car_button_layout = QHBoxLayout()
+
+        self.add_passenger_car_button = QPushButton(
+            "Add Passenger Car"
+        )
+
+        self.remove_passenger_car_button = QPushButton(
+            "Remove Passenger Car"
+        )
+
+        self.move_passenger_car_up_button = QPushButton(
+            "Move Up"
+        )
+
+        self.move_passenger_car_down_button = QPushButton(
+            "Move Down"
+        )
+
+        self.refresh_passenger_cars_button = QPushButton(
+            "Refresh Passenger Consist"
+        )
+
+        passenger_car_button_layout.addWidget(
+            self.add_passenger_car_button
+        )
+
+        passenger_car_button_layout.addWidget(
+            self.remove_passenger_car_button
+        )
+
+        passenger_car_button_layout.addWidget(
+            self.move_passenger_car_up_button
+        )
+
+        passenger_car_button_layout.addWidget(
+            self.move_passenger_car_down_button
+        )
+
+        passenger_car_button_layout.addWidget(
+            self.refresh_passenger_cars_button
+        )
+
+        passenger_car_button_layout.addStretch()
+
+        passenger_consist_layout.addLayout(
+            passenger_car_button_layout
+        )
+
+        self.passenger_car_table = QTableView()
+
+        self.passenger_car_table.setStyleSheet(
+            TABLE_SELECTION_STYLE
+        )
+
+        self.passenger_car_table.setSelectionBehavior(
+            QAbstractItemView.SelectRows
+        )
+
+        self.passenger_car_table.setSelectionMode(
+            QAbstractItemView.SingleSelection
+        )
+
+        self.passenger_car_table.setAlternatingRowColors(
+            True
+        )
+
+        self.passenger_car_table.setEditTriggers(
+            QAbstractItemView.NoEditTriggers
+        )
+
+        self.passenger_car_table.verticalHeader().setVisible(
+            False
+        )
+
+        passenger_consist_layout.addWidget(
+            self.passenger_car_table
+        )
+
+        layout.addWidget(
+            self.passenger_consist_widget
+        )
+
+        self.passenger_car_table_model_data = []
+
+        self.update_passenger_car_table()
+
+        self.passenger_consist_widget.setVisible(
+            False
+        )
+
+        #
         # Route
         #
 
@@ -923,6 +1193,26 @@ class OperationsSessionsWidget(QWidget):
             self.refresh_locomotives
         )
 
+        self.add_passenger_car_button.clicked.connect(
+            self.add_passenger_car
+        )
+
+        self.remove_passenger_car_button.clicked.connect(
+            self.remove_passenger_car
+        )
+
+        self.move_passenger_car_up_button.clicked.connect(
+            self.move_passenger_car_up
+        )
+
+        self.move_passenger_car_down_button.clicked.connect(
+            self.move_passenger_car_down
+        )
+
+        self.refresh_passenger_cars_button.clicked.connect(
+            self.refresh_passenger_cars
+        )
+
         self.generate_car_moves_button.clicked.connect(
             self.generate_car_moves
         )
@@ -1090,6 +1380,10 @@ class OperationsSessionsWidget(QWidget):
 
         self.clear_route()
         self.clear_locomotives()
+        self.clear_passenger_cars()
+        self.passenger_consist_widget.setVisible(
+            False
+        )
         self.clear_train_weight_summary()
 
     def get_train(
@@ -1202,9 +1496,17 @@ class OperationsSessionsWidget(QWidget):
 
             self.clear_route()
             self.clear_locomotives()
+            self.clear_passenger_cars()
+            self.passenger_consist_widget.setVisible(
+                False
+            )
             self.clear_train_weight_summary()
 
             return
+
+        train = self.get_train(
+            train_id
+        )
 
         self.load_route_for_train(
             train_id
@@ -1213,6 +1515,31 @@ class OperationsSessionsWidget(QWidget):
         self.load_locomotives_for_train_assignment(
             assignment_id
         )
+
+        if (
+            train is not None
+            and (
+                train.train_type
+                or ""
+            ).strip().upper()
+            == "PASSENGER"
+        ):
+
+            self.passenger_consist_widget.setVisible(
+                True
+            )
+
+            self.load_passenger_cars_for_train_assignment(
+                assignment_id
+            )
+
+        else:
+
+            self.clear_passenger_cars()
+
+            self.passenger_consist_widget.setVisible(
+                False
+            )
 
         self.update_train_weight_summary()
 
@@ -2124,6 +2451,655 @@ class OperationsSessionsWidget(QWidget):
         )
 
     #
+    # Passenger Consist
+    #
+
+    def load_passenger_cars_for_train_assignment(
+        self,
+        assignment_id,
+    ):
+
+        if assignment_id is None:
+
+            self.clear_passenger_cars()
+
+            return
+
+        assignments = (
+            OperationsSessionTrainPassengerCarService
+            .get_by_operations_session_train(
+                assignment_id
+            )
+        )
+
+        self.passenger_car_table_model_data = []
+
+        for assignment in assignments:
+
+            passenger_car = assignment.passenger_car
+
+            if passenger_car is None:
+
+                continue
+
+            self.passenger_car_table_model_data.append(
+                (
+                    assignment.id,
+                    passenger_car.id,
+                    assignment.sequence,
+                    passenger_car.reporting_mark,
+                    passenger_car.number,
+                    passenger_car.name,
+                    passenger_car.equipment_type,
+                    passenger_car.length,
+                    passenger_car.status,
+                )
+            )
+
+        self.update_passenger_car_table()
+
+        train_id = (
+            self.get_selected_train_id()
+        )
+
+        train = self.get_train(
+            train_id
+        )
+
+        if train is None:
+
+            self.passenger_consist_label.setText(
+                "Passenger Consist"
+            )
+
+            return
+
+        self.passenger_consist_label.setText(
+            (
+                f"Passenger Consist - "
+                f"{train.symbol or ''} - "
+                f"{train.name or ''}"
+            )
+        )
+
+    def update_passenger_car_table(
+        self,
+    ):
+
+        model = QStandardItemModel(
+            self
+        )
+
+        model.setHorizontalHeaderLabels(
+            [
+                "Seq",
+                "Reporting Mark",
+                "Number",
+                "Name",
+                "Type",
+                "Length",
+                "Status",
+            ]
+        )
+
+        for (
+            assignment_id,
+            passenger_car_id,
+            sequence,
+            reporting_mark,
+            number,
+            name,
+            equipment_type,
+            length,
+            status,
+        ) in self.passenger_car_table_model_data:
+
+            items = [
+                QStandardItem(
+                    str(sequence)
+                ),
+                QStandardItem(
+                    reporting_mark or ""
+                ),
+                QStandardItem(
+                    number or ""
+                ),
+                QStandardItem(
+                    name or ""
+                ),
+                QStandardItem(
+                    equipment_type or ""
+                ),
+                QStandardItem(
+                    (
+                        str(length)
+                        if length is not None
+                        else ""
+                    )
+                ),
+                QStandardItem(
+                    status or ""
+                ),
+            ]
+
+            items[0].setData(
+                assignment_id,
+                self.PASSENGER_CAR_ASSIGNMENT_ID_ROLE,
+            )
+
+            items[0].setData(
+                passenger_car_id,
+                self.PASSENGER_CAR_ID_ROLE,
+            )
+
+            model.appendRow(
+                items
+            )
+
+        self.passenger_car_table.setModel(
+            model
+        )
+
+        self.passenger_car_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeToContents
+        )
+
+        self.passenger_car_table.horizontalHeader().setStretchLastSection(
+            True
+        )
+
+    def clear_passenger_cars(
+        self,
+    ):
+
+        self.passenger_car_table_model_data = []
+
+        self.update_passenger_car_table()
+
+        self.passenger_consist_label.setText(
+            "Passenger Consist"
+        )
+
+    def refresh_passenger_cars(
+        self,
+    ):
+
+        assignment_id = (
+            self.get_selected_train_assignment_id_without_message()
+        )
+
+        if assignment_id is None:
+
+            self.clear_passenger_cars()
+
+            return
+
+        train_id = (
+            self.get_selected_train_id()
+        )
+
+        train = self.get_train(
+            train_id
+        )
+
+        if (
+            train is None
+            or (
+                train.train_type
+                or ""
+            ).strip().upper()
+            != "PASSENGER"
+        ):
+
+            self.clear_passenger_cars()
+
+            self.passenger_consist_widget.setVisible(
+                False
+            )
+
+            return
+
+        self.passenger_consist_widget.setVisible(
+            True
+        )
+
+        self.load_passenger_cars_for_train_assignment(
+            assignment_id
+        )
+
+    def add_passenger_car(
+        self,
+    ):
+
+        operations_session = (
+            self.get_selected_session()
+        )
+
+        if operations_session is None:
+
+            return
+
+        if operations_session.status == "COMPLETED":
+
+            QMessageBox.warning(
+                self,
+                "Assign Passenger Car",
+                (
+                    "A completed Operations Session "
+                    "cannot be changed."
+                ),
+            )
+
+            return
+
+        if operations_session.status == "CANCELLED":
+
+            QMessageBox.warning(
+                self,
+                "Assign Passenger Car",
+                (
+                    "A cancelled Operations Session "
+                    "cannot be changed."
+                ),
+            )
+
+            return
+
+        train_id = (
+            self.get_selected_train_id()
+        )
+
+        train = self.get_train(
+            train_id
+        )
+
+        if (
+            train is None
+            or (
+                train.train_type
+                or ""
+            ).strip().upper()
+            != "PASSENGER"
+        ):
+
+            QMessageBox.warning(
+                self,
+                "Assign Passenger Car",
+                (
+                    "Passenger equipment can only be "
+                    "assigned to a Passenger train."
+                ),
+            )
+
+            return
+
+        assignment_id = (
+            self.get_selected_train_assignment_id()
+        )
+
+        if assignment_id is None:
+
+            return
+
+        dialog = AssignPassengerCarDialog(
+            assignment_id,
+            self,
+        )
+
+        if (
+            dialog.exec()
+            != QDialog.Accepted
+        ):
+
+            return
+
+        passenger_car_id = (
+            dialog.get_passenger_car_id()
+        )
+
+        if passenger_car_id is None:
+
+            QMessageBox.warning(
+                self,
+                "Assign Passenger Car",
+                (
+                    "There are no available passenger cars "
+                    "to assign."
+                ),
+            )
+
+            return
+
+        success, result = (
+            OperationsSessionTrainPassengerCarService.create(
+                assignment_id,
+                passenger_car_id,
+            )
+        )
+
+        if not success:
+
+            QMessageBox.warning(
+                self,
+                "Assign Passenger Car",
+                str(result),
+            )
+
+            return
+
+        self.load_passenger_cars_for_train_assignment(
+            assignment_id
+        )
+
+    def get_selected_passenger_car_assignment_id(
+        self,
+    ):
+
+        selection_model = (
+            self.passenger_car_table.selectionModel()
+        )
+
+        if selection_model is None:
+
+            return None
+
+        indexes = (
+            selection_model.selectedRows()
+        )
+
+        if not indexes:
+
+            QMessageBox.information(
+                self,
+                "Passenger Car Assignment",
+                "Please select a passenger car.",
+            )
+
+            return None
+
+        return indexes[0].data(
+            self.PASSENGER_CAR_ASSIGNMENT_ID_ROLE
+        )
+
+    def select_passenger_car_assignment(
+        self,
+        passenger_car_assignment_id,
+    ):
+
+        model = self.passenger_car_table.model()
+
+        if model is None:
+
+            return
+
+        for row in range(
+            model.rowCount()
+        ):
+
+            index = model.index(
+                row,
+                0,
+            )
+
+            assignment_id = index.data(
+                self.PASSENGER_CAR_ASSIGNMENT_ID_ROLE
+            )
+
+            if assignment_id == passenger_car_assignment_id:
+
+                self.passenger_car_table.selectRow(
+                    row
+                )
+
+                return
+
+    def move_passenger_car_up(
+        self,
+    ):
+
+        operations_session = (
+            self.get_selected_session()
+        )
+
+        if operations_session is None:
+
+            return
+
+        if operations_session.status == "COMPLETED":
+
+            QMessageBox.warning(
+                self,
+                "Move Passenger Car",
+                (
+                    "A completed Operations Session "
+                    "cannot be changed."
+                ),
+            )
+
+            return
+
+        if operations_session.status == "CANCELLED":
+
+            QMessageBox.warning(
+                self,
+                "Move Passenger Car",
+                (
+                    "A cancelled Operations Session "
+                    "cannot be changed."
+                ),
+            )
+
+            return
+
+        assignment_id = (
+            self.get_selected_train_assignment_id()
+        )
+
+        if assignment_id is None:
+
+            return
+
+        passenger_car_assignment_id = (
+            self.get_selected_passenger_car_assignment_id()
+        )
+
+        if passenger_car_assignment_id is None:
+
+            return
+
+        success, result = (
+            OperationsSessionTrainPassengerCarService.move_up(
+                passenger_car_assignment_id
+            )
+        )
+
+        if not success:
+
+            QMessageBox.information(
+                self,
+                "Move Passenger Car",
+                str(result),
+            )
+
+            return
+
+        self.load_passenger_cars_for_train_assignment(
+            assignment_id
+        )
+
+        self.select_passenger_car_assignment(
+            passenger_car_assignment_id
+        )
+
+    def move_passenger_car_down(
+        self,
+    ):
+
+        operations_session = (
+            self.get_selected_session()
+        )
+
+        if operations_session is None:
+
+            return
+
+        if operations_session.status == "COMPLETED":
+
+            QMessageBox.warning(
+                self,
+                "Move Passenger Car",
+                (
+                    "A completed Operations Session "
+                    "cannot be changed."
+                ),
+            )
+
+            return
+
+        if operations_session.status == "CANCELLED":
+
+            QMessageBox.warning(
+                self,
+                "Move Passenger Car",
+                (
+                    "A cancelled Operations Session "
+                    "cannot be changed."
+                ),
+            )
+
+            return
+
+        assignment_id = (
+            self.get_selected_train_assignment_id()
+        )
+
+        if assignment_id is None:
+
+            return
+
+        passenger_car_assignment_id = (
+            self.get_selected_passenger_car_assignment_id()
+        )
+
+        if passenger_car_assignment_id is None:
+
+            return
+
+        success, result = (
+            OperationsSessionTrainPassengerCarService.move_down(
+                passenger_car_assignment_id
+            )
+        )
+
+        if not success:
+
+            QMessageBox.information(
+                self,
+                "Move Passenger Car",
+                str(result),
+            )
+
+            return
+
+        self.load_passenger_cars_for_train_assignment(
+            assignment_id
+        )
+
+        self.select_passenger_car_assignment(
+            passenger_car_assignment_id
+        )
+
+    def remove_passenger_car(
+        self,
+    ):
+
+        operations_session = (
+            self.get_selected_session()
+        )
+
+        if operations_session is None:
+
+            return
+
+        if operations_session.status == "COMPLETED":
+
+            QMessageBox.warning(
+                self,
+                "Remove Passenger Car",
+                (
+                    "A completed Operations Session "
+                    "cannot be changed."
+                ),
+            )
+
+            return
+
+        if operations_session.status == "CANCELLED":
+
+            QMessageBox.warning(
+                self,
+                "Remove Passenger Car",
+                (
+                    "A cancelled Operations Session "
+                    "cannot be changed."
+                ),
+            )
+
+            return
+
+        assignment_id = (
+            self.get_selected_train_assignment_id()
+        )
+
+        if assignment_id is None:
+
+            return
+
+        passenger_car_assignment_id = (
+            self.get_selected_passenger_car_assignment_id()
+        )
+
+        if passenger_car_assignment_id is None:
+
+            return
+
+        answer = QMessageBox.question(
+            self,
+            "Remove Passenger Car",
+            (
+                "Remove the selected passenger car "
+                "from this train?"
+            ),
+            QMessageBox.Yes
+            | QMessageBox.No,
+            QMessageBox.No,
+        )
+
+        if answer != QMessageBox.Yes:
+
+            return
+
+        success, result = (
+            OperationsSessionTrainPassengerCarService.delete(
+                passenger_car_assignment_id
+            )
+        )
+
+        if not success:
+
+            QMessageBox.warning(
+                self,
+                "Remove Passenger Car",
+                str(result),
+            )
+
+            return
+
+        self.load_passenger_cars_for_train_assignment(
+            assignment_id
+        )
+
+    #
     # Route
     #
 
@@ -2201,6 +3177,10 @@ class OperationsSessionsWidget(QWidget):
 
         self.clear_route()
         self.clear_locomotives()
+        self.clear_passenger_cars()
+        self.passenger_consist_widget.setVisible(
+            False
+        )
         self.clear_train_weight_summary()
 
     def load_waybills_for_session(

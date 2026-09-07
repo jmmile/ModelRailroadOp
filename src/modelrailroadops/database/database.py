@@ -42,8 +42,8 @@ def _upgrade_waybill_location_schema():
     """Add general Location/Track endpoints without losing Waybills.
 
     SQLite cannot remove the NOT NULL requirement from the three legacy
-    destination columns in place.  A transactional table copy is therefore
-    used when the old schema is detected.  Existing IDs remain unchanged, so
+    destination columns in place. A transactional table copy is therefore
+    used when the old schema is detected. Existing IDs remain unchanged, so
     CarMove and Operations Session references continue to point at the same
     Waybills.
     """
@@ -57,12 +57,14 @@ def _upgrade_waybill_location_schema():
         column["name"]: column
         for column in current_inspector.get_columns("waybills")
     }
+
     general_columns = {
         "origin_location_id",
         "origin_location_track_id",
         "destination_location_id",
         "destination_location_track_id",
     }
+
     legacy_destination_columns = (
         "destination_industry_id",
         "destination_track_id",
@@ -82,15 +84,29 @@ def _upgrade_waybill_location_schema():
         source_columns = set(column_details)
 
         def source(name, fallback="NULL"):
-            return name if name in source_columns else fallback
+            return (
+                name
+                if name in source_columns
+                else fallback
+            )
 
         raw_connection = engine.raw_connection()
 
         try:
             cursor = raw_connection.cursor()
-            cursor.execute("PRAGMA foreign_keys = OFF")
-            cursor.execute("BEGIN")
-            cursor.execute("DROP TABLE IF EXISTS waybills_location_upgrade")
+
+            cursor.execute(
+                "PRAGMA foreign_keys = OFF"
+            )
+
+            cursor.execute(
+                "BEGIN"
+            )
+
+            cursor.execute(
+                "DROP TABLE IF EXISTS waybills_location_upgrade"
+            )
+
             cursor.execute(
                 """
                 CREATE TABLE waybills_location_upgrade (
@@ -119,12 +135,16 @@ def _upgrade_waybill_location_schema():
                     FOREIGN KEY(car_id) REFERENCES cars(id),
                     FOREIGN KEY(operations_session_id)
                         REFERENCES operations_sessions(id),
-                    FOREIGN KEY(origin_location_id) REFERENCES locations(id),
+                    FOREIGN KEY(origin_location_id)
+                        REFERENCES locations(id),
                     FOREIGN KEY(origin_location_track_id)
                         REFERENCES location_tracks(id),
-                    FOREIGN KEY(origin_industry_id) REFERENCES industries(id),
-                    FOREIGN KEY(origin_track_id) REFERENCES industry_tracks(id),
-                    FOREIGN KEY(origin_spot_id) REFERENCES spots(id),
+                    FOREIGN KEY(origin_industry_id)
+                        REFERENCES industries(id),
+                    FOREIGN KEY(origin_track_id)
+                        REFERENCES industry_tracks(id),
+                    FOREIGN KEY(origin_spot_id)
+                        REFERENCES spots(id),
                     FOREIGN KEY(destination_location_id)
                         REFERENCES locations(id),
                     FOREIGN KEY(destination_location_track_id)
@@ -133,10 +153,12 @@ def _upgrade_waybill_location_schema():
                         REFERENCES industries(id),
                     FOREIGN KEY(destination_track_id)
                         REFERENCES industry_tracks(id),
-                    FOREIGN KEY(destination_spot_id) REFERENCES spots(id)
+                    FOREIGN KEY(destination_spot_id)
+                        REFERENCES spots(id)
                 )
                 """
             )
+
             cursor.execute(
                 f"""
                 INSERT INTO waybills_location_upgrade (
@@ -187,24 +209,44 @@ def _upgrade_waybill_location_schema():
                 FROM waybills
                 """
             )
-            cursor.execute("DROP TABLE waybills")
+
             cursor.execute(
-                "ALTER TABLE waybills_location_upgrade RENAME TO waybills"
+                "DROP TABLE waybills"
             )
+
+            cursor.execute(
+                (
+                    "ALTER TABLE waybills_location_upgrade "
+                    "RENAME TO waybills"
+                )
+            )
+
             raw_connection.commit()
-            cursor.execute("PRAGMA foreign_keys = ON")
+
+            cursor.execute(
+                "PRAGMA foreign_keys = ON"
+            )
+
         except Exception:
             raw_connection.rollback()
+
             try:
-                raw_connection.cursor().execute("PRAGMA foreign_keys = ON")
+                raw_connection.cursor().execute(
+                    "PRAGMA foreign_keys = ON"
+                )
             except Exception:
                 pass
+
             raise
+
         finally:
             raw_connection.close()
 
-    # Populate general endpoint IDs for all legacy Industry Waybills and for
-    # named origins that already match a Location. This is safe to rerun.
+    #
+    # Populate general endpoint IDs for all legacy Industry Waybills and
+    # for named origins that already match a Location.
+    #
+
     with engine.begin() as connection:
         connection.execute(
             text(
@@ -215,12 +257,14 @@ def _upgrade_waybill_location_schema():
                     (
                         SELECT industries.operating_location_id
                         FROM industries
-                        WHERE industries.id = waybills.origin_industry_id
+                        WHERE industries.id
+                            = waybills.origin_industry_id
                     ),
                     (
                         SELECT locations.id
                         FROM locations
-                        WHERE locations.name = waybills.origin_location
+                        WHERE locations.name
+                            = waybills.origin_location
                     )
                 ),
                 origin_location_track_id = COALESCE(
@@ -228,7 +272,8 @@ def _upgrade_waybill_location_schema():
                     (
                         SELECT industry_tracks.operating_track_id
                         FROM industry_tracks
-                        WHERE industry_tracks.id = waybills.origin_track_id
+                        WHERE industry_tracks.id
+                            = waybills.origin_track_id
                     )
                 ),
                 destination_location_id = COALESCE(
@@ -236,7 +281,8 @@ def _upgrade_waybill_location_schema():
                     (
                         SELECT industries.operating_location_id
                         FROM industries
-                        WHERE industries.id = waybills.destination_industry_id
+                        WHERE industries.id
+                            = waybills.destination_industry_id
                     )
                 ),
                 destination_location_track_id = COALESCE(
@@ -244,7 +290,8 @@ def _upgrade_waybill_location_schema():
                     (
                         SELECT industry_tracks.operating_track_id
                         FROM industry_tracks
-                        WHERE industry_tracks.id = waybills.destination_track_id
+                        WHERE industry_tracks.id
+                            = waybills.destination_track_id
                     )
                 )
                 """
@@ -262,7 +309,9 @@ def _upgrade_waybill_load_schema():
 
     columns = {
         column["name"]
-        for column in current_inspector.get_columns("waybills")
+        for column in current_inspector.get_columns(
+            "waybills"
+        )
     }
 
     additions = {
@@ -273,6 +322,7 @@ def _upgrade_waybill_load_schema():
 
     with engine.begin() as connection:
         for column_name, column_type in additions.items():
+
             if column_name not in columns:
                 connection.execute(
                     text(
@@ -280,7 +330,6 @@ def _upgrade_waybill_load_schema():
                         f"ADD COLUMN {column_name} {column_type}"
                     )
                 )
-
 
 
 def _upgrade_waybill_archive_schema():
@@ -293,15 +342,19 @@ def _upgrade_waybill_archive_schema():
 
     columns = {
         column["name"]
-        for column in current_inspector.get_columns("waybills")
+        for column in current_inspector.get_columns(
+            "waybills"
+        )
     }
 
     with engine.begin() as connection:
+
         if "archived" not in columns:
             connection.execute(
                 text(
                     "ALTER TABLE waybills "
-                    "ADD COLUMN archived BOOLEAN NOT NULL DEFAULT 0"
+                    "ADD COLUMN archived BOOLEAN "
+                    "NOT NULL DEFAULT 0"
                 )
             )
 
@@ -313,11 +366,12 @@ def _upgrade_waybill_archive_schema():
                 )
             )
 
+
 def initialize_database():
     """
     Create all database tables and apply required migrations.
 
-    Existing data is preserved.  SQLAlchemy's create_all()
+    Existing data is preserved. SQLAlchemy's create_all()
     creates missing tables but does not add columns to existing
     SQLite tables, so each schema addition is checked explicitly.
     """
@@ -353,7 +407,10 @@ def initialize_database():
 
         with engine.begin() as connection:
 
-            if "symbol" in columns and "number" not in columns:
+            if (
+                "symbol" in columns
+                and "number" not in columns
+            ):
 
                 connection.execute(
                     text(
@@ -364,8 +421,13 @@ def initialize_database():
                     )
                 )
 
-                columns.remove("symbol")
-                columns.add("number")
+                columns.remove(
+                    "symbol"
+                )
+
+                columns.add(
+                    "number"
+                )
 
             train_columns = {
                 "train_type": "VARCHAR(50)",
@@ -375,21 +437,30 @@ def initialize_database():
                 "scheduled_arrival": "TIME",
             }
 
-            for column_name, column_type in train_columns.items():
+            for (
+                column_name,
+                column_type,
+            ) in train_columns.items():
 
                 if column_name not in columns:
 
                     connection.execute(
                         text(
                             f"ALTER TABLE trains "
-                            f"ADD COLUMN {column_name} {column_type}"
+                            f"ADD COLUMN {column_name} "
+                            f"{column_type}"
                         )
                     )
 
     #
-    # Link the existing Industry system to general operational
-    # Locations and LocationTracks. Existing Industry IDs and
-    # IndustryTrack IDs remain unchanged.
+    # Link the existing freight Industry system to general
+    # operational Locations and LocationTracks.
+    #
+    # Industry remains a freight-specific entity. Each Industry
+    # receives a corresponding general Location classified as
+    # INDUSTRY.
+    #
+    # Existing Industry IDs and IndustryTrack IDs remain unchanged.
     #
 
     if inspector.has_table(
@@ -417,6 +488,11 @@ def initialize_database():
                     )
                 )
 
+            #
+            # Create corresponding general INDUSTRY Locations when
+            # they do not already exist.
+            #
+
             connection.execute(
                 text(
                     """
@@ -425,12 +501,19 @@ def initialize_database():
                         location_type,
                         active
                     )
-                    SELECT name, 'INDUSTRY', 1
+                    SELECT
+                        name,
+                        'INDUSTRY',
+                        1
                     FROM industries
                     WHERE TRIM(name) != ''
                     """
                 )
             )
+
+            #
+            # Link each Industry record to its general Location.
+            #
 
             connection.execute(
                 text(
@@ -440,6 +523,26 @@ def initialize_database():
                         SELECT locations.id
                         FROM locations
                         WHERE locations.name = industries.name
+                    )
+                    """
+                )
+            )
+
+            #
+            # Industry-linked Locations are always classified as
+            # INDUSTRY. Other general Locations such as stations,
+            # yards, staging, and interchanges remain independent.
+            #
+
+            connection.execute(
+                text(
+                    """
+                    UPDATE locations
+                    SET location_type = 'INDUSTRY'
+                    WHERE id IN (
+                        SELECT operating_location_id
+                        FROM industries
+                        WHERE operating_location_id IS NOT NULL
                     )
                     """
                 )
@@ -486,8 +589,10 @@ def initialize_database():
                         1
                     FROM industry_tracks
                     JOIN industries
-                        ON industries.id = industry_tracks.industry_id
-                    WHERE industries.operating_location_id IS NOT NULL
+                        ON industries.id
+                        = industry_tracks.industry_id
+                    WHERE industries.operating_location_id
+                        IS NOT NULL
                     """
                 )
             )
@@ -502,8 +607,29 @@ def initialize_database():
                         JOIN industries
                             ON industries.operating_location_id
                             = location_tracks.location_id
-                        WHERE industries.id = industry_tracks.industry_id
-                        AND location_tracks.name = industry_tracks.name
+                        WHERE industries.id
+                            = industry_tracks.industry_id
+                        AND location_tracks.name
+                            = industry_tracks.name
+                    )
+                    """
+                )
+            )
+
+            #
+            # Industry-linked general tracks remain classified as
+            # INDUSTRY tracks.
+            #
+
+            connection.execute(
+                text(
+                    """
+                    UPDATE location_tracks
+                    SET track_type = 'INDUSTRY'
+                    WHERE id IN (
+                        SELECT operating_track_id
+                        FROM industry_tracks
+                        WHERE operating_track_id IS NOT NULL
                     )
                     """
                 )
@@ -535,7 +661,7 @@ def initialize_database():
                 )
 
     #
-    # Add industry_id to train_routes when required.
+    # Add general location fields to train_routes when required.
     #
 
     if inspector.has_table(
@@ -593,6 +719,18 @@ def initialize_database():
 
         with engine.begin() as connection:
 
+            #
+            # Legacy route rows that are not already linked to an
+            # Industry or general Location may represent independent
+            # operational locations such as staging, yards, or
+            # interchanges. Only those unresolved route rows are
+            # allowed to create new general Location records.
+            #
+            # This prevents stale route display text from creating
+            # duplicate OTHER Locations for routes that already point
+            # to a valid Industry or Location.
+            #
+
             connection.execute(
                 text(
                     """
@@ -604,20 +742,32 @@ def initialize_database():
                     SELECT DISTINCT
                         location,
                         CASE
-                            WHEN LOWER(location) LIKE '%staging%'
+                            WHEN LOWER(location)
+                                LIKE '%staging%'
                                 THEN 'STAGING'
-                            WHEN LOWER(location) LIKE '%interchange%'
+                            WHEN LOWER(location)
+                                LIKE '%interchange%'
                                 THEN 'INTERCHANGE'
-                            WHEN LOWER(location) LIKE '%yard%'
+                            WHEN LOWER(location)
+                                LIKE '%yard%'
                                 THEN 'YARD'
                             ELSE 'OTHER'
                         END,
                         1
                     FROM train_routes
                     WHERE TRIM(location) != ''
+                    AND industry_id IS NULL
+                    AND location_id IS NULL
                     """
                 )
             )
+
+            #
+            # Populate the general Location reference. Freight
+            # Industry routes always use the Industry's corresponding
+            # operating Location. Independent routes use an existing
+            # Location having the same name.
+            #
 
             connection.execute(
                 text(
@@ -627,14 +777,40 @@ def initialize_database():
                         (
                             SELECT industries.operating_location_id
                             FROM industries
-                            WHERE industries.id = train_routes.industry_id
+                            WHERE industries.id
+                                = train_routes.industry_id
                         ),
+                        location_id,
                         (
                             SELECT locations.id
                             FROM locations
-                            WHERE locations.name = train_routes.location
+                            WHERE locations.name
+                                = train_routes.location
                         )
                     )
+                    """
+                )
+            )
+
+            #
+            # The text location column remains for display and
+            # compatibility, but the structured Location ID is now
+            # authoritative. Synchronize the text from that Location
+            # so obsolete names cannot survive after a route has been
+            # linked to the correct operational Location.
+            #
+
+            connection.execute(
+                text(
+                    """
+                    UPDATE train_routes
+                    SET location = (
+                        SELECT locations.name
+                        FROM locations
+                        WHERE locations.id
+                            = train_routes.location_id
+                    )
+                    WHERE location_id IS NOT NULL
                     """
                 )
             )
@@ -671,6 +847,7 @@ def initialize_database():
 
     #
     # Add execution fields introduced on the CarMove model.
+    #
     # Existing moves are PENDING because no completion state was
     # stored before this migration.
     #
@@ -726,11 +903,18 @@ def initialize_database():
                 "cars"
             )
         }
-        car_columns = set(car_column_details)
+
+        car_columns = set(
+            car_column_details
+        )
 
         with engine.begin() as connection:
 
-            if "empty_weight_lbs" not in car_columns and "weight" in car_columns:
+            if (
+                "empty_weight_lbs" not in car_columns
+                and "weight" in car_columns
+            ):
+
                 connection.execute(
                     text(
                         """
@@ -744,7 +928,9 @@ def initialize_database():
                     text(
                         """
                         UPDATE cars
-                        SET empty_weight_lbs = CAST(ROUND(weight * 2000) AS INTEGER)
+                        SET empty_weight_lbs = CAST(
+                            ROUND(weight * 2000) AS INTEGER
+                        )
                         WHERE weight IS NOT NULL
                         """
                     )
@@ -759,10 +945,16 @@ def initialize_database():
                     )
                 )
 
-                car_columns.remove("weight")
-                car_columns.add("empty_weight_lbs")
+                car_columns.remove(
+                    "weight"
+                )
+
+                car_columns.add(
+                    "empty_weight_lbs"
+                )
 
             if "empty_weight_lbs" not in car_columns:
+
                 connection.execute(
                     text(
                         """
@@ -772,16 +964,25 @@ def initialize_database():
                     )
                 )
 
-                car_columns.add("empty_weight_lbs")
+                car_columns.add(
+                    "empty_weight_lbs"
+                )
 
             empty_weight_type = str(
-                car_column_details.get("empty_weight_lbs", {}).get("type", "")
+                car_column_details.get(
+                    "empty_weight_lbs",
+                    {},
+                ).get(
+                    "type",
+                    "",
+                )
             ).upper()
 
             if (
                 "empty_weight_lbs" in car_column_details
                 and "INT" not in empty_weight_type
             ):
+
                 connection.execute(
                     text(
                         """
@@ -806,9 +1007,12 @@ def initialize_database():
                         """
                         UPDATE cars
                         SET empty_weight_lbs = CAST(
-                            ROUND(empty_weight_lbs_legacy) AS INTEGER
+                            ROUND(
+                                empty_weight_lbs_legacy
+                            ) AS INTEGER
                         )
-                        WHERE empty_weight_lbs_legacy IS NOT NULL
+                        WHERE empty_weight_lbs_legacy
+                            IS NOT NULL
                         """
                     )
                 )
@@ -823,6 +1027,7 @@ def initialize_database():
                 )
 
             if "load_limit_lbs" not in car_columns:
+
                 connection.execute(
                     text(
                         """
@@ -833,6 +1038,7 @@ def initialize_database():
                 )
 
             if "operating_location_id" not in car_columns:
+
                 connection.execute(
                     text(
                         """
@@ -844,6 +1050,7 @@ def initialize_database():
                 )
 
             if "operating_track_id" not in car_columns:
+
                 connection.execute(
                     text(
                         """
@@ -882,8 +1089,14 @@ def initialize_database():
                 )
             )
 
-    # Waybills can now begin or end on any operational LocationTrack,
-    # including yard, staging, and interchange tracks.
+    #
+    # Waybills can now begin or end on any operational
+    # LocationTrack, including yard, staging, and interchange
+    # tracks.
+    #
+
     _upgrade_waybill_location_schema()
+
     _upgrade_waybill_load_schema()
+
     _upgrade_waybill_archive_schema()

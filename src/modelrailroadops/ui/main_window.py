@@ -67,7 +67,7 @@ class MainWindow(QMainWindow):
     Database-backed tabs are refreshed whenever the user
     selects the corresponding tab.
 
-    The Industries tab also emits an industry_changed
+    The Freight Industries tab also emits an industry_changed
     signal whenever an industry is added, edited, or deleted.
     MainWindow receives that signal and immediately refreshes
     the Industry Tracks widget.
@@ -130,14 +130,14 @@ class MainWindow(QMainWindow):
         )
 
         #
-        # Industries
+        # Freight Industries
         #
 
         self.industry_tab = IndustryTab()
 
         self.tabs.addTab(
             self.industry_tab,
-            "Industries",
+            "Freight Industries",
         )
 
         #
@@ -165,7 +165,7 @@ class MainWindow(QMainWindow):
         )
 
         #
-        # When the Industries tab changes the database,
+        # When the Freight Industries tab changes the database,
         # immediately refresh Industry Tracks.
         #
 
@@ -302,7 +302,7 @@ class MainWindow(QMainWindow):
         self,
     ):
         """
-        Called whenever the Industries tab adds,
+        Called whenever the Freight Industries tab adds,
         edits, or deletes an industry.
 
         Refresh Industry Tracks immediately from
@@ -353,7 +353,7 @@ class MainWindow(QMainWindow):
             self.passenger_cars_widget.refresh()
 
         #
-        # Industries
+        # Freight Industries
         #
 
         elif widget is self.industry_tab:

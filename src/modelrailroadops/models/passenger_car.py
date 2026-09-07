@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 from sqlalchemy import (
     Integer,
     String,
@@ -7,9 +9,16 @@ from sqlalchemy import (
 from sqlalchemy.orm import (
     Mapped,
     mapped_column,
+    relationship,
 )
 
 from modelrailroadops.database.base import Base
+
+
+if TYPE_CHECKING:
+    from modelrailroadops.models.operations_session_train_passenger_car import (
+        OperationsSessionTrainPassengerCar,
+    )
 
 
 class PassengerCar(Base):
@@ -62,10 +71,6 @@ class PassengerCar(Base):
         nullable=False,
     )
 
-    #
-    # Passenger car length in feet.
-    #
-
     length: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
@@ -80,6 +85,13 @@ class PassengerCar(Base):
     notes: Mapped[str | None] = mapped_column(
         String(500),
         nullable=True,
+    )
+
+    session_train_assignments: Mapped[
+        list["OperationsSessionTrainPassengerCar"]
+    ] = relationship(
+        "OperationsSessionTrainPassengerCar",
+        back_populates="passenger_car",
     )
 
     def __repr__(self):

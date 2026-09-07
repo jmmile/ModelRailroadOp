@@ -14,12 +14,16 @@ from sqlalchemy.orm import (
 
 from modelrailroadops.database.base import Base
 
+
 if TYPE_CHECKING:
     from modelrailroadops.models.operations_session import (
         OperationsSession,
     )
     from modelrailroadops.models.operations_session_train_locomotive import (
         OperationsSessionTrainLocomotive,
+    )
+    from modelrailroadops.models.operations_session_train_passenger_car import (
+        OperationsSessionTrainPassengerCar,
     )
     from modelrailroadops.models.train import (
         Train,
@@ -90,5 +94,16 @@ class OperationsSessionTrain(
         cascade="all, delete-orphan",
         order_by=(
             "OperationsSessionTrainLocomotive.sequence"
+        ),
+    )
+
+    passenger_cars: Mapped[
+        list["OperationsSessionTrainPassengerCar"]
+    ] = relationship(
+        "OperationsSessionTrainPassengerCar",
+        back_populates="operations_session_train",
+        cascade="all, delete-orphan",
+        order_by=(
+            "OperationsSessionTrainPassengerCar.sequence"
         ),
     )
