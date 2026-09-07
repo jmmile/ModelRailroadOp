@@ -291,6 +291,10 @@ class TrainRouteService:
         Intermediate stops are preserved. A route with no stops receives two
         stops; a one-stop route keeps that stop as its origin and receives a
         new destination.
+
+        Existing timetable values on route stops are preserved.
+        Newly created endpoint stops begin without route-stop timetable
+        values.
         """
 
         if train_id is None:
@@ -343,25 +347,66 @@ class TrainRouteService:
                 ) = values
 
             if not routes:
-                origin_route = TrainRoute(train_id=train_id, sequence=1)
-                destination_route = TrainRoute(train_id=train_id, sequence=2)
-                apply_endpoint(origin_route, origin_values)
-                apply_endpoint(destination_route, destination_values)
-                session.add_all([origin_route, destination_route])
+                origin_route = TrainRoute(
+                    train_id=train_id,
+                    sequence=1,
+                )
+                destination_route = TrainRoute(
+                    train_id=train_id,
+                    sequence=2,
+                )
+                apply_endpoint(
+                    origin_route,
+                    origin_values,
+                )
+                apply_endpoint(
+                    destination_route,
+                    destination_values,
+                )
+                session.add_all(
+                    [
+                        origin_route,
+                        destination_route,
+                    ]
+                )
+
             elif len(routes) == 1:
-                apply_endpoint(routes[0], origin_values)
+                apply_endpoint(
+                    routes[0],
+                    origin_values,
+                )
+
                 destination_route = TrainRoute(
                     train_id=train_id,
                     sequence=routes[0].sequence + 1,
                 )
-                apply_endpoint(destination_route, destination_values)
-                session.add(destination_route)
+
+                apply_endpoint(
+                    destination_route,
+                    destination_values,
+                )
+
+                session.add(
+                    destination_route
+                )
+
             else:
-                apply_endpoint(routes[0], origin_values)
-                apply_endpoint(routes[-1], destination_values)
+                apply_endpoint(
+                    routes[0],
+                    origin_values,
+                )
+                apply_endpoint(
+                    routes[-1],
+                    destination_values,
+                )
 
             session.flush()
-            TrainRouteService._sync_train_endpoints(session, train_id)
+
+            TrainRouteService._sync_train_endpoints(
+                session,
+                train_id,
+            )
+
             session.commit()
 
             return True, "Train route endpoints updated."
@@ -399,6 +444,8 @@ class TrainRouteService:
         industry_id=None,
         location_id=None,
         location_track_id=None,
+        arrival_time=None,
+        departure_time=None,
     ):
 
         if train_id is None:
@@ -527,6 +574,8 @@ class TrainRouteService:
                 location_track_id=location_track_id,
                 sequence=sequence,
                 location=location,
+                arrival_time=arrival_time,
+                departure_time=departure_time,
                 description=(
                     description.strip()
                     if description
@@ -569,6 +618,8 @@ class TrainRouteService:
         industry_id=None,
         location_id=None,
         location_track_id=None,
+        arrival_time=None,
+        departure_time=None,
     ):
 
         if route_id is None:
@@ -746,6 +797,10 @@ class TrainRouteService:
             route.location_id = location_id
 
             route.location_track_id = location_track_id
+
+            route.arrival_time = arrival_time
+
+            route.departure_time = departure_time
 
             route.description = (
                 description.strip()

@@ -1,4 +1,3 @@
-
 from PySide6.QtCore import (
     Signal,
     Qt,
@@ -347,6 +346,26 @@ class TrainRoutesWidget(QWidget):
 
         self.table.horizontalHeader().setSectionResizeMode(
             2,
+            QHeaderView.ResizeToContents
+        )
+
+        self.table.horizontalHeader().setSectionResizeMode(
+            3,
+            QHeaderView.ResizeToContents
+        )
+
+        self.table.horizontalHeader().setSectionResizeMode(
+            4,
+            QHeaderView.ResizeToContents
+        )
+
+        self.table.horizontalHeader().setSectionResizeMode(
+            5,
+            QHeaderView.ResizeToContents
+        )
+
+        self.table.horizontalHeader().setSectionResizeMode(
+            6,
             QHeaderView.Stretch
         )
 

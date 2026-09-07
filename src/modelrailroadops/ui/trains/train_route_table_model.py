@@ -1,6 +1,3 @@
-# Train Route Table Model
-
-
 from PySide6.QtCore import (
     QAbstractTableModel,
     Qt,
@@ -20,6 +17,8 @@ class TrainRouteTableModel(QAbstractTableModel):
         "Location",
         "Track",
         "Traffic Use",
+        "Arrival",
+        "Departure",
         "Description",
     ]
 
@@ -33,6 +32,23 @@ class TrainRouteTableModel(QAbstractTableModel):
         )
 
         self.routes = []
+
+    @staticmethod
+    def _format_time(
+        value,
+    ):
+
+        if value is None:
+
+            return ""
+
+        formatted = value.strftime(
+            "%I:%M %p"
+        )
+
+        return formatted.lstrip(
+            "0"
+        )
 
     #
     # Row count
@@ -191,6 +207,22 @@ class TrainRouteTableModel(QAbstractTableModel):
             elif column == 4:
 
                 value = (
+                    self._format_time(
+                        route.arrival_time
+                    )
+                )
+
+            elif column == 5:
+
+                value = (
+                    self._format_time(
+                        route.departure_time
+                    )
+                )
+
+            elif column == 6:
+
+                value = (
                     route.description
                     or ""
                 )
@@ -209,7 +241,11 @@ class TrainRouteTableModel(QAbstractTableModel):
 
         if role == Qt.TextAlignmentRole:
 
-            if column == 0:
+            if column in (
+                0,
+                4,
+                5,
+            ):
 
                 return (
                     Qt.AlignCenter
@@ -259,6 +295,22 @@ class TrainRouteTableModel(QAbstractTableModel):
                 ).casefold()
 
             if column == 4:
+
+                return (
+                    route.arrival_time
+                    if route.arrival_time is not None
+                    else ""
+                )
+
+            if column == 5:
+
+                return (
+                    route.departure_time
+                    if route.departure_time is not None
+                    else ""
+                )
+
+            if column == 6:
 
                 return (
                     route.description

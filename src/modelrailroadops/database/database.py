@@ -661,7 +661,8 @@ def initialize_database():
                 )
 
     #
-    # Add general location fields to train_routes when required.
+    # Add general location and timetable fields to train_routes
+    # when required.
     #
 
     if inspector.has_table(
@@ -716,6 +717,35 @@ def initialize_database():
                         """
                     )
                 )
+
+        #
+        # Add optional timetable times.
+        #
+        # Existing route rows receive NULL values, preserving
+        # all current unscheduled route behavior.
+        #
+
+        route_timetable_columns = {
+            "arrival_time": "TIME",
+            "departure_time": "TIME",
+        }
+
+        with engine.begin() as connection:
+
+            for (
+                column_name,
+                column_type,
+            ) in route_timetable_columns.items():
+
+                if column_name not in columns:
+
+                    connection.execute(
+                        text(
+                            f"ALTER TABLE train_routes "
+                            f"ADD COLUMN {column_name} "
+                            f"{column_type}"
+                        )
+                    )
 
         with engine.begin() as connection:
 

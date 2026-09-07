@@ -1,7 +1,10 @@
+from datetime import time
+
 from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    Time,
 )
 
 from sqlalchemy.orm import (
@@ -26,6 +29,10 @@ class TrainRoute(Base):
     identity for the location while the location field
     remains available for general railroad locations such
     as staging yards.
+
+    Route stops may also contain optional scheduled
+    arrival and departure times. These times are used
+    for passenger and freight timetable operations.
     """
 
     __tablename__ = "train_routes"
@@ -107,6 +114,30 @@ class TrainRoute(Base):
             "location_tracks.id",
             ondelete="SET NULL",
         ),
+        nullable=True,
+    )
+
+    #
+    # Scheduled arrival time.
+    #
+    # Null means no scheduled arrival has been defined
+    # for this route stop.
+    #
+
+    arrival_time: Mapped[time | None] = mapped_column(
+        Time,
+        nullable=True,
+    )
+
+    #
+    # Scheduled departure time.
+    #
+    # Null means no scheduled departure has been defined
+    # for this route stop.
+    #
+
+    departure_time: Mapped[time | None] = mapped_column(
+        Time,
         nullable=True,
     )
 
