@@ -50,6 +50,9 @@ from modelrailroadops.ui.trains.trains_widget import (
 from modelrailroadops.ui.widgets.locations_widget import (
     LocationsWidget,
 )
+from modelrailroadops.ui.widgets.track_diagram_widget import (
+    TrackDiagramWidget,
+)
 
 from modelrailroadops.ui.locomotives.locomotives_widget import (
     LocomotivesWidget,
@@ -162,6 +165,13 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(
             self.locations_widget,
             "Locations",
+        )
+
+        self.track_diagram_widget = TrackDiagramWidget()
+
+        self.tabs.addTab(
+            self.track_diagram_widget,
+            "Track Diagram",
         )
 
         #
@@ -375,6 +385,10 @@ class MainWindow(QMainWindow):
         elif widget is self.locations_widget:
 
             self.locations_widget.refresh()
+
+        elif widget is self.track_diagram_widget:
+
+            self.track_diagram_widget.refresh(force=True)
 
         #
         # Car Locations

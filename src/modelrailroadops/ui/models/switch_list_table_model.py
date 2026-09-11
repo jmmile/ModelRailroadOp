@@ -2,6 +2,7 @@ from PySide6.QtCore import (
     QAbstractTableModel,
     Qt,
 )
+from PySide6.QtGui import QColor
 
 from modelrailroadops.services.switch_list_service import (
     SwitchListService,
@@ -49,10 +50,12 @@ class SwitchListTableModel(QAbstractTableModel):
             parent
         )
 
+        self.all_rows = []
         self.rows = []
 
         self.operations_session_id = None
         self.train_id = None
+        self.filter_mode = "ALL"
 
     #
     # Row count
@@ -124,6 +127,24 @@ class SwitchListTableModel(QAbstractTableModel):
         row = self.rows[
             index.row()
         ]
+
+        if role == Qt.BackgroundRole:
+            if row.get("move_status") == "COMPLETED":
+                return QColor("#e6f4ea")
+
+            if (
+                row.get("move_type") == "SETOUT"
+                and (row.get("current_location", "") or "").startswith(
+                    "On Train:"
+                )
+            ):
+                return QColor("#fff3cd")
+
+        if (
+            role == Qt.ForegroundRole
+            and row.get("move_status") == "COMPLETED"
+        ):
+            return QColor("#5f6368")
 
         #
         # Display data
@@ -495,17 +516,57 @@ class SwitchListTableModel(QAbstractTableModel):
             self.operations_session_id
             is None
         ):
-            self.rows = []
+            self.all_rows = []
 
         else:
-            self.rows = (
+            self.all_rows = (
                 SwitchListService.get_switch_list_rows(
                     self.operations_session_id,
                     train_id=self.train_id,
                 )
             )
 
+        self._apply_filter()
+
         self.endResetModel()
+
+    def set_filter(self, filter_mode):
+        self.beginResetModel()
+        self.filter_mode = filter_mode or "ALL"
+        self._apply_filter()
+        self.endResetModel()
+
+    def _apply_filter(self):
+        if self.filter_mode == "PENDING":
+            self.rows = [
+                row
+                for row in self.all_rows
+                if row.get("move_status") == "PENDING"
+            ]
+
+        elif self.filter_mode == "ON_TRAIN":
+            self.rows = [
+                row
+                for row in self.all_rows
+                if (
+                    row.get("move_type") == "SETOUT"
+                    and row.get("move_status") == "PENDING"
+                    and (
+                        row.get("current_location", "")
+                        or ""
+                    ).startswith("On Train:")
+                )
+            ]
+
+        elif self.filter_mode == "COMPLETED":
+            self.rows = [
+                row
+                for row in self.all_rows
+                if row.get("move_status") == "COMPLETED"
+            ]
+
+        else:
+            self.rows = list(self.all_rows)
 
     #
     # Refresh

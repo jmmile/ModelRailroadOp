@@ -964,6 +964,70 @@ class CarMoveService:
     #
 
     @staticmethod
+    def _validate_deletion(moves):
+        completed_moves = [
+            move
+            for move in moves
+            if move.status == "COMPLETED"
+        ]
+
+        onboard_cars = {
+            f"{move.car.reporting_mark} {move.car.number}"
+            for move in moves
+            if (
+                move.car is not None
+                and (move.car.location or "").startswith("On Train:")
+            )
+        }
+
+        if completed_moves or onboard_cars:
+            affected_cars = {
+                f"{move.car.reporting_mark} {move.car.number}"
+                for move in completed_moves
+                if move.car is not None
+            }
+            affected_cars.update(onboard_cars)
+            car_text = ", ".join(sorted(affected_cars))
+
+            return (
+                False,
+                (
+                    "Car Moves cannot be deleted after operations have "
+                    "started. Return or set out onboard cars first."
+                    + (
+                        f" Affected cars: {car_text}."
+                        if car_text
+                        else ""
+                    )
+                ),
+            )
+
+        return True, "Car Moves may be deleted."
+
+    @staticmethod
+    def can_delete_by_operations_session(
+        operations_session_id,
+    ):
+        if operations_session_id is None:
+            return False, "Operations Session ID is required."
+
+        with SessionLocal() as session:
+            moves = (
+                session.execute(
+                    select(CarMove)
+                    .options(joinedload(CarMove.car))
+                    .where(
+                        CarMove.operations_session_id
+                        == operations_session_id
+                    )
+                )
+                .scalars()
+                .all()
+            )
+
+            return CarMoveService._validate_deletion(moves)
+
+    @staticmethod
     def delete(
         move_id,
     ):
@@ -988,6 +1052,13 @@ class CarMoveService:
                     False,
                     "Car Move not found.",
                 )
+
+            ready, message = CarMoveService._validate_deletion(
+                [move]
+            )
+
+            if not ready:
+                return False, message
 
             session.delete(
                 move
@@ -1041,11 +1112,20 @@ class CarMoveService:
 
             moves = (
                 session.execute(
-                    statement
+                    statement.options(
+                        joinedload(CarMove.car)
+                    )
                 )
                 .scalars()
                 .all()
             )
+
+            ready, message = CarMoveService._validate_deletion(
+                moves
+            )
+
+            if not ready:
+                return False, message
 
             for move in moves:
 

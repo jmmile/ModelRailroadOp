@@ -7,6 +7,8 @@ from modelrailroadops.models.car import Car
 from modelrailroadops.models.car_movement import CarMovement
 from modelrailroadops.models.location import Location
 from modelrailroadops.models.location_track import LocationTrack
+from modelrailroadops.models.industry import Industry
+from modelrailroadops.models.industry_track import IndustryTrack
 from modelrailroadops.models.operations_session import OperationsSession
 from modelrailroadops.models.spot import Spot
 from modelrailroadops.services.car_location_service import CarLocationService
@@ -155,3 +157,82 @@ def test_general_track_capacity_blocks_an_additional_car(test_database):
         movement_count = session.scalar(select(func.count()).select_from(CarMovement))
         assert operations_session.status == "PLANNED"
         assert movement_count == 0
+
+
+def test_return_to_industry_spot_records_on_train_origin(test_database):
+    with test_database.SessionLocal() as session:
+        location = Location(
+            name="Acme Transfer Company",
+            location_type="INDUSTRY",
+            active=True,
+        )
+        operations_session = OperationsSession(
+            name="Pine Bluff Turn",
+            session_date=date(2026, 9, 8),
+            status="ACTIVE",
+        )
+        session.add_all((location, operations_session))
+        session.flush()
+
+        location_track = LocationTrack(
+            location_id=location.id,
+            name="Loading Dock",
+            track_type="INDUSTRY",
+            active=True,
+        )
+        industry = Industry(
+            name="Acme Transfer Company",
+            railroad="GN",
+            location="Pine Bluff",
+            operating_location_id=location.id,
+        )
+        session.add_all((location_track, industry))
+        session.flush()
+
+        industry_track = IndustryTrack(
+            industry_id=industry.id,
+            name="Loading Dock",
+            operating_track_id=location_track.id,
+        )
+        session.add(industry_track)
+        session.flush()
+
+        spot = Spot(
+            track_id=industry_track.id,
+            spot_number=1,
+            hazardous_allowed=True,
+            load_only=False,
+            empty_only=False,
+        )
+        car = Car(
+            reporting_mark="GN",
+            number="33103",
+            owner="GN",
+            car_type="Boxcar",
+            status="AVAILABLE",
+            location="On Train: L201 - Pine Bluff Turn",
+        )
+        session.add_all((spot, car))
+        session.commit()
+
+        car_id = car.id
+        spot_id = spot.id
+        session_id = operations_session.id
+
+    moved, message = CarLocationService.assign_car_to_spot_with_message(
+        car_id,
+        spot_id,
+        session_id,
+    )
+    assert moved, message
+
+    with test_database.SessionLocal() as session:
+        movement = session.execute(
+            select(CarMovement).order_by(CarMovement.id.desc())
+        ).scalars().first()
+
+        assert movement.from_location == "On Train: L201 - Pine Bluff Turn"
+        assert (
+            movement.to_location
+            == "Acme Transfer Company - Loading Dock - Spot 1"
+        )

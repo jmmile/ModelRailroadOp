@@ -267,6 +267,8 @@ class CarService:
 
             car.operating_track_id = track.operating_track_id
 
+            car.operating_track_position = None
+
 
             #
             # Keep the existing location field synchronized
@@ -327,6 +329,8 @@ class CarService:
             car.operating_location_id = None
 
             car.operating_track_id = None
+
+            car.operating_track_position = None
 
             car.location = "Unassigned"
 

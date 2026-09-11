@@ -1091,6 +1091,17 @@ def initialize_database():
                     )
                 )
 
+            if "operating_track_position" not in car_columns:
+
+                connection.execute(
+                    text(
+                        """
+                        ALTER TABLE cars
+                        ADD COLUMN operating_track_position INTEGER
+                        """
+                    )
+                )
+
             connection.execute(
                 text(
                     """
@@ -1115,6 +1126,37 @@ def initialize_database():
                         WHERE industry_tracks.id = cars.track_id
                     )
                     WHERE track_id IS NOT NULL
+                    """
+                )
+            )
+
+            # Give existing cars a stable order after all structured track
+            # links have been synchronized. Physical locations are unchanged.
+            connection.execute(
+                text(
+                    """
+                    UPDATE cars
+                    SET operating_track_position = (
+                        SELECT COUNT(*)
+                        FROM cars AS earlier_car
+                        WHERE earlier_car.operating_track_id
+                            = cars.operating_track_id
+                        AND earlier_car.industry_id IS NULL
+                        AND earlier_car.id <= cars.id
+                    )
+                    WHERE operating_track_id IS NOT NULL
+                    AND industry_id IS NULL
+                    AND operating_track_position IS NULL
+                    """
+                )
+            )
+
+            connection.execute(
+                text(
+                    """
+                    UPDATE cars
+                    SET operating_track_position = NULL
+                    WHERE industry_id IS NOT NULL
                     """
                 )
             )

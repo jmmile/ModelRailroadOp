@@ -828,7 +828,13 @@ class AddCarDialog(QDialog):
                         spot_id
                     )
 
-                else:
+                elif self.car.industry_id is not None:
+
+                    CarService.clear_spot_assignment(
+                        self.car.id
+                    )
+
+                elif self.car.operating_track_id is None:
 
                     CarService.clear_spot_assignment(
                         self.car.id

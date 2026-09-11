@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import ForeignKey, Integer, String
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -117,6 +117,11 @@ class Car(Base):
             "location_tracks.id",
             ondelete="SET NULL",
         ),
+        nullable=True,
+    )
+
+    operating_track_position: Mapped[int | None] = mapped_column(
+        Integer,
         nullable=True,
     )
 

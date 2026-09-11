@@ -2,8 +2,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 from modelrailroadops.database.database import SessionLocal
-
+from modelrailroadops.models.car_movement import CarMovement
 from modelrailroadops.models.car_move import CarMove
+from modelrailroadops.models.operations_session import OperationsSession
 from modelrailroadops.models.waybill import Waybill
 
 
@@ -30,6 +31,237 @@ class SwitchListService:
         "ACTIVE",
         "IN_PROGRESS",
     )
+
+    @staticmethod
+    def check_session_consistency(operations_session_id):
+        """Find legacy state conflicts without changing any data."""
+
+        with SessionLocal() as session:
+            operations_session = session.get(
+                OperationsSession,
+                operations_session_id,
+            )
+            if operations_session is None:
+                return None
+
+            moves = session.execute(
+                select(CarMove).where(
+                    CarMove.operations_session_id
+                    == operations_session_id
+                ).order_by(CarMove.id)
+            ).scalars().all()
+            history_count = len(session.execute(
+                select(CarMovement).where(
+                    CarMovement.operations_session_id
+                    == operations_session_id
+                )
+            ).scalars().all())
+
+            pending_moves = [
+                move for move in moves
+                if move.status != "COMPLETED"
+            ]
+            detached_waybill_moves = [
+                move for move in moves
+                if (
+                    move.waybill is None
+                    or move.waybill.operations_session_id
+                    != operations_session_id
+                )
+            ]
+            completed_waybill_pending_moves = [
+                move for move in pending_moves
+                if (
+                    move.waybill is not None
+                    and move.waybill.status == "COMPLETED"
+                )
+            ]
+
+            issues = []
+            if (
+                operations_session.status == "COMPLETED"
+                and operations_session.completed_at is None
+            ):
+                issues.append(
+                    "The completed session has no completion timestamp."
+                )
+            if (
+                operations_session.status == "COMPLETED"
+                and pending_moves
+            ):
+                issues.append(
+                    f"{len(pending_moves)} generated move(s) are still PENDING."
+                )
+            if completed_waybill_pending_moves:
+                issues.append(
+                    f"{len(completed_waybill_pending_moves)} pending move(s) "
+                    "belong to completed waybills."
+                )
+            if detached_waybill_moves:
+                issues.append(
+                    f"{len(detached_waybill_moves)} move(s) reference a waybill "
+                    "assigned to another session or no longer available."
+                )
+            if moves and history_count == 0:
+                issues.append(
+                    "Generated moves exist, but no car-movement history was recorded."
+                )
+
+            return {
+                "operations_session_id": operations_session.id,
+                "session_name": operations_session.name,
+                "session_status": operations_session.status,
+                "issues": issues,
+                "move_count": len(moves),
+                "pending_move_count": len(pending_moves),
+                "pending_move_ids": [move.id for move in pending_moves],
+                "detached_waybill_move_count": len(detached_waybill_moves),
+                "history_count": history_count,
+                "can_remove_stale_pending_moves": (
+                    operations_session.status == "COMPLETED"
+                    and bool(pending_moves)
+                ),
+            }
+
+    @staticmethod
+    def remove_stale_pending_moves(operations_session_id):
+        """Remove only pending instructions from a completed legacy session."""
+
+        with SessionLocal() as session:
+            operations_session = session.get(
+                OperationsSession,
+                operations_session_id,
+            )
+            if operations_session is None:
+                return False, "The Operations Session was not found."
+            if operations_session.status != "COMPLETED":
+                return (
+                    False,
+                    "Stale moves can be removed only from a completed session.",
+                )
+
+            pending_moves = session.execute(
+                select(CarMove).where(
+                    CarMove.operations_session_id == operations_session_id,
+                    CarMove.status != "COMPLETED",
+                )
+            ).scalars().all()
+            if not pending_moves:
+                return False, "No stale pending moves were found."
+
+            count = len(pending_moves)
+            for move in pending_moves:
+                session.delete(move)
+            session.commit()
+
+            return (
+                True,
+                f"Removed {count} stale pending move instruction(s). "
+                "Waybills, car locations, and car history were not changed.",
+            )
+
+    @staticmethod
+    def get_completed_session_report(
+        operations_session_id,
+        train_id=None,
+    ):
+        """Return a read-only summary of an operating session."""
+
+        rows = SwitchListService.get_switch_list_rows(
+            operations_session_id,
+            train_id=train_id,
+        )
+
+        with SessionLocal() as session:
+            operations_session = session.get(
+                OperationsSession,
+                operations_session_id,
+            )
+
+            if operations_session is None:
+                return None
+
+            return_count = session.execute(
+                select(CarMovement).where(
+                    CarMovement.operations_session_id
+                    == operations_session_id,
+                    CarMovement.movement_type == "RETURN",
+                )
+            ).scalars().all()
+
+            session_data = {
+                "operations_session_id": operations_session.id,
+                "session_name": (
+                    operations_session.name
+                    or f"Session {operations_session.id}"
+                ),
+                "session_date": operations_session.session_date,
+                "session_status": operations_session.status or "",
+                "completed_at": operations_session.completed_at,
+            }
+
+        completed_moves = [
+            row for row in rows
+            if row.get("move_status") == "COMPLETED"
+        ]
+        pending_moves = [
+            row for row in rows
+            if row.get("move_status") != "COMPLETED"
+        ]
+        pickups = [
+            row for row in rows
+            if row.get("move_type") == "PICKUP"
+        ]
+        setouts = [
+            row for row in rows
+            if row.get("move_type") == "SETOUT"
+        ]
+
+        cars = {}
+        for row in rows:
+            cars[row["car_id"]] = {
+                "car_id": row["car_id"],
+                "car": row.get("car", ""),
+                "car_type": row.get("car_type", ""),
+                "train": row.get("train", ""),
+                "final_location": row.get(
+                    "current_location",
+                    "Unassigned",
+                ),
+                "on_train": row.get(
+                    "current_location",
+                    "",
+                ).startswith("On Train:"),
+            }
+
+        car_rows = sorted(
+            cars.values(),
+            key=lambda row: (
+                row["train"].casefold(),
+                row["car"].casefold(),
+            ),
+        )
+        trains = sorted({
+            row.get("train", "")
+            for row in rows
+            if row.get("train")
+        }, key=str.casefold)
+
+        return {
+            **session_data,
+            "train_id": train_id,
+            "trains": trains,
+            "total_moves": len(rows),
+            "pickup_count": len(pickups),
+            "setout_count": len(setouts),
+            "completed_count": len(completed_moves),
+            "pending_count": len(pending_moves),
+            "return_count": len(return_count),
+            "on_train_count": sum(
+                1 for row in car_rows if row["on_train"]
+            ),
+            "cars": car_rows,
+        }
 
     # ==========================================================
     # WAYBILL LOAD OPTIONS
@@ -225,25 +457,42 @@ class SwitchListService:
         If train_id is provided, return only CarMoves assigned
         to that Train.
 
-        Completed instructions are retained so the switch-list
-        data layer can report their status while the associated
-        Waybill remains active or in progress.
+        Completed instructions are retained for a COMPLETED
+        Operations Session, including after its Waybills have
+        been completed. CANCELLED Waybills are never included.
 
-        Only CarMoves whose Waybill remains ACTIVE or
-        IN_PROGRESS are included in the active switch list.
+        For a non-completed Operations Session, only CarMoves
+        whose Waybill remains ACTIVE or IN_PROGRESS are included.
         """
 
         if operations_session_id is None:
             return []
 
         with SessionLocal() as session:
+            operations_session = session.get(
+                OperationsSession,
+                operations_session_id,
+            )
+
+            if operations_session is None:
+                return []
+
             filters = [
                 CarMove.operations_session_id
                 == operations_session_id,
-                Waybill.status.in_(
-                    SwitchListService.ACTIVE_STATUSES
-                ),
             ]
+
+            if operations_session.status == "COMPLETED":
+                filters.append(
+                    Waybill.status != "CANCELLED"
+                )
+
+            else:
+                filters.append(
+                    Waybill.status.in_(
+                        SwitchListService.ACTIVE_STATUSES
+                    )
+                )
 
             if train_id is not None:
                 filters.append(
@@ -698,6 +947,10 @@ class SwitchListService:
                         car.status
                         or ""
                     ),
+                    "current_location": (
+                        car.location
+                        or "Unassigned"
+                    ),
                     "instruction_location": (
                         instruction_location
                     ),
@@ -886,3 +1139,59 @@ class SwitchListService:
         )
 
         return setout_rows
+
+    # ==========================================================
+    # CARS CURRENTLY ON TRAINS
+    # ==========================================================
+
+    @staticmethod
+    def get_on_train_rows(
+        operations_session_id,
+        train_id=None,
+    ):
+        """Return cars picked up but not yet set out.
+
+        Each result is based on a pending SETOUT instruction and
+        the car's current On Train location. The existing move
+        validator supplies the operator-facing readiness state.
+        """
+
+        from modelrailroadops.services.switch_list_move_service import (
+            SwitchListMoveService,
+        )
+
+        setout_rows = SwitchListService.get_setout_rows(
+            operations_session_id,
+            train_id=train_id,
+        )
+
+        on_train_rows = []
+
+        for row in setout_rows:
+            if row["move_status"] != "PENDING":
+                continue
+
+            current_location = row.get(
+                "current_location",
+                "",
+            )
+
+            if not current_location.startswith("On Train:"):
+                continue
+
+            can_setout, message = (
+                SwitchListMoveService.can_complete_move(
+                    row["car_move_id"]
+                )
+            )
+
+            on_train_row = dict(row)
+            on_train_row["can_setout"] = can_setout
+            on_train_row["setout_status"] = (
+                "Ready"
+                if can_setout
+                else message
+            )
+            on_train_rows.append(on_train_row)
+
+        return on_train_rows

@@ -7,8 +7,10 @@ from modelrailroadops.models.industry import Industry
 from modelrailroadops.models.car import Car
 from modelrailroadops.models.location import Location
 from modelrailroadops.models.location_track import LocationTrack
+from modelrailroadops.models.spot import Spot
 from modelrailroadops.models.train_route import TrainRoute
 from modelrailroadops.models.waybill import Waybill
+from modelrailroadops.services.car_location_service import CarLocationService
 
 
 class LocationService:
@@ -41,6 +43,237 @@ class LocationService:
     )
 
     @staticmethod
+    def move_car_on_track(car_id, direction):
+        """Move a car one position left or right on its current track."""
+
+        if direction not in (-1, 1):
+            return False, "Track position direction must be left or right."
+
+        with SessionLocal() as session:
+            car = session.get(Car, car_id)
+            if car is None:
+                return False, "Car not found."
+            if car.industry_id is not None:
+                if car.track_id is None or car.spot_id is None:
+                    return False, "The car does not have an industry spot."
+
+                spots = session.execute(
+                    select(Spot)
+                    .where(Spot.track_id == car.track_id)
+                    .order_by(Spot.spot_number)
+                ).scalars().all()
+                current_index = next(
+                    (
+                        index for index, spot in enumerate(spots)
+                        if spot.id == car.spot_id
+                    ),
+                    None,
+                )
+                if current_index is None:
+                    return False, "The car's industry spot could not be found."
+
+                target_index = current_index + direction
+                if target_index < 0 or target_index >= len(spots):
+                    end_name = "left" if direction < 0 else "right"
+                    return False, f"The car is already at the {end_name} end."
+
+                current_spot = spots[current_index]
+                target_spot = spots[target_index]
+                target_car = session.execute(
+                    select(Car).where(Car.spot_id == target_spot.id)
+                ).scalars().first()
+
+                valid, message = CarLocationService.validate_car_for_spot(
+                    car,
+                    target_spot,
+                )
+                if not valid:
+                    return False, message
+                if target_car is not None:
+                    valid, message = CarLocationService.validate_car_for_spot(
+                        target_car,
+                        current_spot,
+                    )
+                    if not valid:
+                        return False, message
+
+                track = session.get(IndustryTrack, car.track_id)
+                industry = session.get(Industry, car.industry_id)
+                if track is None or industry is None:
+                    return False, "The car's industry track could not be found."
+
+                car.spot_id = target_spot.id
+                car.location = (
+                    f"{industry.name} - {track.name} - "
+                    f"Spot {target_spot.spot_number}"
+                )
+                if target_car is not None:
+                    target_car.spot_id = current_spot.id
+                    target_car.location = (
+                        f"{industry.name} - {track.name} - "
+                        f"Spot {current_spot.spot_number}"
+                    )
+                session.commit()
+                return True, "Car industry spot updated."
+
+            if car.operating_track_id is None:
+                return False, "The car is not on a general railroad track."
+
+            cars = session.execute(
+                select(Car).where(
+                    Car.operating_track_id == car.operating_track_id,
+                    Car.industry_id.is_(None),
+                )
+            ).scalars().all()
+            cars.sort(key=lambda item: (
+                item.operating_track_position
+                if item.operating_track_position is not None
+                else 999999,
+                item.id,
+            ))
+
+            current_index = next(
+                (
+                    index for index, item in enumerate(cars)
+                    if item.id == car_id
+                ),
+                None,
+            )
+            if current_index is None:
+                return False, "Car position could not be found."
+
+            target_index = current_index + direction
+            if target_index < 0 or target_index >= len(cars):
+                end_name = "left" if direction < 0 else "right"
+                return False, f"The car is already at the {end_name} end."
+
+            for position, item in enumerate(cars, start=1):
+                item.operating_track_position = position
+
+            current_car = cars[current_index]
+            target_car = cars[target_index]
+            (
+                current_car.operating_track_position,
+                target_car.operating_track_position,
+            ) = (
+                target_car.operating_track_position,
+                current_car.operating_track_position,
+            )
+            session.commit()
+
+            return True, "Car track position updated."
+
+    @staticmethod
+    def reorder_car_on_track(car_id, insertion_index):
+        """Place a car at a same-track insertion point or industry spot."""
+
+        if not isinstance(insertion_index, int):
+            return False, "The requested track position is invalid."
+
+        with SessionLocal() as session:
+            car = session.get(Car, car_id)
+            if car is None:
+                return False, "Car not found."
+            if car.industry_id is not None:
+                if car.track_id is None or car.spot_id is None:
+                    return False, "The car does not have an industry spot."
+
+                spots = session.execute(
+                    select(Spot)
+                    .where(Spot.track_id == car.track_id)
+                    .order_by(Spot.spot_number)
+                ).scalars().all()
+                if not spots:
+                    return False, "The industry track has no spots."
+
+                target_index = max(
+                    0,
+                    min(insertion_index, len(spots) - 1),
+                )
+                target_spot = spots[target_index]
+                if target_spot.id == car.spot_id:
+                    return True, "Car is already in that industry spot."
+
+                current_spot = session.get(Spot, car.spot_id)
+                target_car = session.execute(
+                    select(Car).where(Car.spot_id == target_spot.id)
+                ).scalars().first()
+                if current_spot is None:
+                    return False, "The car's industry spot could not be found."
+
+                valid, message = CarLocationService.validate_car_for_spot(
+                    car,
+                    target_spot,
+                )
+                if not valid:
+                    return False, message
+                if target_car is not None:
+                    valid, message = CarLocationService.validate_car_for_spot(
+                        target_car,
+                        current_spot,
+                    )
+                    if not valid:
+                        return False, message
+
+                track = session.get(IndustryTrack, car.track_id)
+                industry = session.get(Industry, car.industry_id)
+                if track is None or industry is None:
+                    return False, "The car's industry track could not be found."
+
+                car.spot_id = target_spot.id
+                car.location = (
+                    f"{industry.name} - {track.name} - "
+                    f"Spot {target_spot.spot_number}"
+                )
+                if target_car is not None:
+                    target_car.spot_id = current_spot.id
+                    target_car.location = (
+                        f"{industry.name} - {track.name} - "
+                        f"Spot {current_spot.spot_number}"
+                    )
+                session.commit()
+                return True, "Car industry spot updated."
+
+            if car.operating_track_id is None:
+                return False, "The car is not on a general railroad track."
+
+            cars = session.execute(
+                select(Car).where(
+                    Car.operating_track_id == car.operating_track_id,
+                    Car.industry_id.is_(None),
+                )
+            ).scalars().all()
+            cars.sort(key=lambda item: (
+                item.operating_track_position
+                if item.operating_track_position is not None
+                else 999999,
+                item.id,
+            ))
+
+            current_index = next(
+                (
+                    index for index, item in enumerate(cars)
+                    if item.id == car_id
+                ),
+                None,
+            )
+            if current_index is None:
+                return False, "Car position could not be found."
+
+            requested_index = max(0, min(insertion_index, len(cars)))
+            moving_car = cars.pop(current_index)
+            if current_index < requested_index:
+                requested_index -= 1
+            requested_index = max(0, min(requested_index, len(cars)))
+            cars.insert(requested_index, moving_car)
+
+            for position, item in enumerate(cars, start=1):
+                item.operating_track_position = position
+            session.commit()
+
+            return True, "Car track position updated."
+
+    @staticmethod
     def get_all():
 
         with SessionLocal() as session:
@@ -51,6 +284,9 @@ class LocationService:
                     .options(
                         selectinload(Location.tracks).selectinload(
                             LocationTrack.industry_tracks
+                        ),
+                        selectinload(Location.tracks).selectinload(
+                            LocationTrack.cars
                         ),
                         selectinload(Location.industries),
                     )

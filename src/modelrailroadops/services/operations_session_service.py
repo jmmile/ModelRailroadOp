@@ -4,6 +4,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 from modelrailroadops.database.database import SessionLocal
+from modelrailroadops.models.car import Car
+from modelrailroadops.models.car_move import CarMove
 from modelrailroadops.models.operations_session import OperationsSession
 from modelrailroadops.models.waybill import Waybill
 from modelrailroadops.services.waybill_service import WaybillService
@@ -428,6 +430,43 @@ class OperationsSessionService:
                     ),
                 )
 
+            onboard_cars = (
+                session.execute(
+                    select(Car).distinct()
+                    .join(
+                        CarMove,
+                        CarMove.car_id == Car.id,
+                    )
+                    .where(
+                        CarMove.operations_session_id == session_id,
+                        CarMove.move_type == "SETOUT",
+                        CarMove.status == "PENDING",
+                        Car.location.like("On Train:%"),
+                    )
+                    .order_by(
+                        Car.reporting_mark,
+                        Car.number,
+                    )
+                )
+                .scalars()
+                .all()
+            )
+
+            if onboard_cars:
+                car_names = ", ".join(
+                    f"{car.reporting_mark} {car.number}"
+                    for car in onboard_cars
+                )
+
+                return (
+                    False,
+                    (
+                        "The Operations Session cannot be cancelled while "
+                        f"cars remain on trains: {car_names}. Return or "
+                        "set out these cars first."
+                    ),
+                )
+
             operations_session.status = "CANCELLED"
 
             session.commit()
@@ -463,6 +502,49 @@ class OperationsSessionService:
                     (
                         f"Operations Session "
                         f"{session_id} was not found."
+                    ),
+                )
+
+            if operations_session.status == "COMPLETED":
+                return (
+                    False,
+                    "A completed Operations Session cannot be deleted.",
+                )
+
+            onboard_cars = (
+                session.execute(
+                    select(Car).distinct()
+                    .join(
+                        CarMove,
+                        CarMove.car_id == Car.id,
+                    )
+                    .where(
+                        CarMove.operations_session_id == session_id,
+                        CarMove.move_type == "SETOUT",
+                        CarMove.status == "PENDING",
+                        Car.location.like("On Train:%"),
+                    )
+                    .order_by(
+                        Car.reporting_mark,
+                        Car.number,
+                    )
+                )
+                .scalars()
+                .all()
+            )
+
+            if onboard_cars:
+                car_names = ", ".join(
+                    f"{car.reporting_mark} {car.number}"
+                    for car in onboard_cars
+                )
+
+                return (
+                    False,
+                    (
+                        "The Operations Session cannot be deleted while "
+                        f"cars remain on trains: {car_names}. Return or "
+                        "set out these cars first."
                     ),
                 )
 

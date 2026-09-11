@@ -10,6 +10,7 @@ from modelrailroadops.models.location_track import LocationTrack
 from modelrailroadops.models.operations_session import OperationsSession
 from modelrailroadops.models.spot import Spot
 from modelrailroadops.models.car_movement import CarMovement
+from modelrailroadops.models.train import Train
 
 
 class CarLocationService:
@@ -26,6 +27,22 @@ class CarLocationService:
         - Determining eligible cars
         - Recording movement history
     """
+
+    @staticmethod
+    def _next_track_position(session, location_track_id, car_id=None):
+        cars = session.execute(
+            select(Car).where(
+                Car.operating_track_id == location_track_id,
+                Car.id != car_id if car_id is not None else True,
+            )
+        ).scalars().all()
+        positions = [
+            car.operating_track_position
+            for car in cars
+            if car.operating_track_position is not None
+        ]
+        last_position = max(positions) if positions else 0
+        return max(last_position, len(cars)) + 1
 
     # ==========================================================
     # OPERATIONS SESSION MOVEMENT STATE
@@ -565,7 +582,10 @@ class CarLocationService:
                     "The spot's industry could not be found.",
                 )
 
-            old_location = "Unassigned"
+            old_location = (
+                car.location
+                or "Unassigned"
+            )
 
             if car.spot_id is not None:
 
@@ -659,6 +679,7 @@ class CarLocationService:
             car.operating_track_id = (
                 track.operating_track_id
             )
+            car.operating_track_position = None
             car.location = new_location
 
             movement = CarMovement(
@@ -698,6 +719,97 @@ class CarLocationService:
 
         finally:
 
+            if owns_session:
+                session.close()
+
+    # ==========================================================
+    # MOVE CAR ONTO TRAIN
+    # ==========================================================
+
+    @staticmethod
+    def move_car_to_train_with_message(
+        car_id,
+        train_id,
+        operations_session_id,
+        db_session=None,
+    ):
+        """Mark a picked-up car as being aboard a train.
+
+        The car is removed from its physical Location, Track,
+        and Spot while it is in transit. A movement-history
+        record preserves the pickup location and identifies the
+        train carrying the car.
+
+        The Operations Session must already be ACTIVE. When
+        db_session is supplied, the caller owns the transaction.
+        """
+
+        owns_session = db_session is None
+        session = SessionLocal() if owns_session else db_session
+
+        try:
+            car = session.get(Car, car_id)
+            train = session.get(Train, train_id)
+
+            if car is None:
+                return False, "Car not found."
+
+            if train is None:
+                return False, "Train not found."
+
+            session_ready, message = (
+                CarLocationService._prepare_operations_session_for_movement(
+                    session,
+                    operations_session_id,
+                )
+            )
+
+            if not session_ready:
+                return False, message
+
+            old_location = car.location or "Unassigned"
+            train_identity = " - ".join(
+                part
+                for part in (
+                    train.symbol,
+                    train.name,
+                )
+                if part
+            )
+            new_location = f"On Train: {train_identity}"
+
+            car.industry_id = None
+            car.track_id = None
+            car.spot_id = None
+            car.operating_location_id = None
+            car.operating_track_id = None
+            car.operating_track_position = None
+            car.location = new_location
+
+            session.add(
+                CarMovement(
+                    car_id=car.id,
+                    operations_session_id=operations_session_id,
+                    from_location=old_location,
+                    to_location=new_location,
+                    movement_type="PICKUP",
+                    notes=f"Picked up by {train_identity}.",
+                )
+            )
+
+            if owns_session:
+                session.commit()
+                session.refresh(car)
+
+            return True, ""
+
+        except Exception as exc:
+            if owns_session:
+                session.rollback()
+
+            return False, str(exc)
+
+        finally:
             if owns_session:
                 session.close()
 
@@ -846,6 +958,17 @@ class CarLocationService:
                 else "MOVE"
             )
 
+            new_position = car.operating_track_position
+            if (
+                car.operating_track_id != track.id
+                or new_position is None
+            ):
+                new_position = CarLocationService._next_track_position(
+                    session,
+                    track.id,
+                    car.id,
+                )
+
             car.industry_id = None
             car.track_id = None
             car.spot_id = None
@@ -855,6 +978,7 @@ class CarLocationService:
             car.operating_track_id = (
                 track.id
             )
+            car.operating_track_position = new_position
             car.location = new_location
 
             session.add(
@@ -1076,6 +1200,7 @@ class CarLocationService:
             car.spot_id = None
             car.operating_location_id = None
             car.operating_track_id = None
+            car.operating_track_position = None
             car.location = "Unassigned"
 
             movement = CarMovement(

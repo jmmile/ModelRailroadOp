@@ -41,6 +41,7 @@ class LocationsWidget(QWidget):
 
         self.locations = []
         self.tracks = []
+        self.cars = []
 
         layout = QVBoxLayout(self)
 
@@ -129,6 +130,8 @@ class LocationsWidget(QWidget):
                 "Type",
                 "Traffic Use",
                 "Car Capacity",
+                "Occupied",
+                "Available",
                 "Status",
                 "Notes",
             ]
@@ -139,15 +142,49 @@ class LocationsWidget(QWidget):
             self.track_table,
             self.track_model,
         )
-        track_layout.addWidget(
-            self.track_table
+        self.track_cars_label = QLabel(
+            "Cars on Selected Track"
         )
+
+        self.track_car_model = QStandardItemModel(self)
+        self.track_car_model.setHorizontalHeaderLabels(
+            [
+                "Car",
+                "Type",
+                "Status",
+                "Length",
+                "Current Location",
+            ]
+        )
+
+        self.track_car_table = QTableView()
+        self._configure_table(
+            self.track_car_table,
+            self.track_car_model,
+        )
+
+        car_area = QWidget()
+        car_layout = QVBoxLayout(car_area)
+        car_layout.setContentsMargins(0, 0, 0, 0)
+        car_layout.addWidget(self.track_cars_label)
+        car_layout.addWidget(self.track_car_table)
+
+        track_splitter = QSplitter(Qt.Vertical)
+        track_splitter.setChildrenCollapsible(False)
+        track_splitter.setHandleWidth(4)
+        track_splitter.addWidget(self.track_table)
+        track_splitter.addWidget(car_area)
+        track_splitter.setSizes([100, 200])
+        track_layout.addWidget(track_splitter)
 
         splitter = QSplitter(
             Qt.Vertical
         )
         splitter.setChildrenCollapsible(
             False
+        )
+        splitter.setHandleWidth(
+            4
         )
         splitter.addWidget(
             self.location_table
@@ -157,8 +194,8 @@ class LocationsWidget(QWidget):
         )
         splitter.setSizes(
             [
-                430,
-                300,
+                260,
+                400,
             ]
         )
         layout.addWidget(
@@ -206,7 +243,7 @@ class LocationsWidget(QWidget):
             self.location_selection_changed
         )
         self.track_table.selectionModel().selectionChanged.connect(
-            self.update_buttons
+            self.track_selection_changed
         )
 
         self.refresh()
@@ -469,6 +506,14 @@ class LocationsWidget(QWidget):
         self.load_tracks()
         self.update_buttons()
 
+    def track_selection_changed(
+        self,
+        selected=None,
+        deselected=None,
+    ):
+        self.load_track_cars()
+        self.update_buttons()
+
     def load_tracks(
         self,
     ):
@@ -495,10 +540,17 @@ class LocationsWidget(QWidget):
             )
         else:
             self.track_label.setText(
-                f"Tracks — {location.name}"
+                f"Tracks - {location.name}"
             )
 
         for track in self.tracks:
+            occupied = len(track.cars)
+            available = (
+                max(track.capacity - occupied, 0)
+                if track.capacity is not None
+                else "Not limited"
+            )
+
             self.track_model.appendRow(
                 self._row_items(
                     [
@@ -509,8 +561,10 @@ class LocationsWidget(QWidget):
                             track.capacity
                             if track.capacity
                             is not None
-                            else ""
+                            else "Not set"
                         ),
+                        occupied,
+                        available,
                         (
                             "Active"
                             if track.active
@@ -519,6 +573,54 @@ class LocationsWidget(QWidget):
                         track.notes or "",
                     ],
                     track.id,
+                )
+            )
+
+        self.load_track_cars()
+
+    def load_track_cars(self):
+        track = self.get_selected_track()
+        self.cars = (
+            sorted(
+                track.cars,
+                key=lambda car: (
+                    (car.reporting_mark or "").casefold(),
+                    (car.number or "").casefold(),
+                ),
+            )
+            if track is not None
+            else []
+        )
+
+        self.track_car_model.removeRows(
+            0,
+            self.track_car_model.rowCount(),
+        )
+
+        if track is None:
+            self.track_cars_label.setText(
+                "Cars on Selected Track"
+            )
+        else:
+            self.track_cars_label.setText(
+                f"Cars on {track.name}: {len(self.cars)}"
+            )
+
+        for car in self.cars:
+            self.track_car_model.appendRow(
+                self._row_items(
+                    [
+                        f"{car.reporting_mark} {car.number}",
+                        car.car_type or "",
+                        car.status or "",
+                        (
+                            f"{car.length} ft"
+                            if car.length is not None
+                            else ""
+                        ),
+                        car.location or "Unassigned",
+                    ],
+                    car.id,
                 )
             )
 

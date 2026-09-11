@@ -14,11 +14,20 @@ from modelrailroadops.models.waybill import Waybill
 from modelrailroadops.services.car_location_service import (
     CarLocationService,
 )
+from modelrailroadops.services.car_move_generation_service import (
+    CarMoveGenerationService,
+)
+from modelrailroadops.services.car_move_service import (
+    CarMoveService,
+)
 from modelrailroadops.services.operations_session_service import (
     OperationsSessionService,
 )
 from modelrailroadops.services.switch_list_move_service import (
     SwitchListMoveService,
+)
+from modelrailroadops.services.switch_list_service import (
+    SwitchListService,
 )
 
 
@@ -352,19 +361,25 @@ def test_pickup_starts_planned_session_and_marks_waybill_in_progress(
         assert setout.status == "PENDING"
         assert setout.completed_at is None
 
-        assert (
-            car.operating_location_id
-            == record_ids["source_location_id"]
-        )
+        assert car.operating_location_id is None
+        assert car.operating_track_id is None
+        assert car.industry_id is None
+        assert car.track_id is None
+        assert car.spot_id is None
+        assert car.location == "On Train: 101 - Weston Turn"
 
-        assert (
-            car.operating_track_id
-            == record_ids["source_track_id"]
-        )
+        assert movement_count == 1
 
-        assert car.location == "Staging Yard - Eastbound"
+    on_train_rows = SwitchListService.get_on_train_rows(
+        record_ids["operations_session_id"]
+    )
 
-        assert movement_count == 0
+    assert len(on_train_rows) == 1
+    assert on_train_rows[0]["car"] == "TEST 1001"
+    assert on_train_rows[0]["train"] == "101 - Weston Turn"
+    assert on_train_rows[0]["destination"] == "Weston - Arrival"
+    assert on_train_rows[0]["can_setout"] is True
+    assert on_train_rows[0]["setout_status"] == "Ready"
 
 
 def test_setout_cannot_complete_before_pickup(
@@ -520,7 +535,7 @@ def test_pickup_then_setout_completes_waybill_and_moves_car(
 
         assert car.location == "Weston - Arrival"
 
-        assert len(movements) == 1
+        assert len(movements) == 2
 
         assert (
             movements[0].operations_session_id
@@ -534,8 +549,29 @@ def test_pickup_then_setout_completes_waybill_and_moves_car(
 
         assert (
             movements[0].to_location
+            == "On Train: 101 - Weston Turn"
+        )
+
+        assert movements[0].movement_type == "PICKUP"
+
+        assert (
+            movements[1].operations_session_id
+            == operations_session.id
+        )
+
+        assert (
+            movements[1].from_location
+            == "On Train: 101 - Weston Turn"
+        )
+
+        assert (
+            movements[1].to_location
             == "Weston - Arrival"
         )
+
+    assert SwitchListService.get_on_train_rows(
+        record_ids["operations_session_id"]
+    ) == []
 
 
 def test_session_can_be_completed_after_setout(
@@ -657,19 +693,206 @@ def test_failed_setout_does_not_move_car_or_complete_waybill(
         assert setout.status == "PENDING"
         assert setout.completed_at is None
 
+        assert car.operating_location_id is None
+        assert car.operating_track_id is None
+        assert car.location == "On Train: 101 - Weston Turn"
+
+        assert movement_count == 1
+
+    on_train_rows = SwitchListService.get_on_train_rows(
+        record_ids["operations_session_id"]
+    )
+
+    assert len(on_train_rows) == 1
+    assert on_train_rows[0]["can_setout"] is False
+    assert "capacity" in on_train_rows[0]["setout_status"].casefold()
+
+
+def test_return_car_restores_pickup_location_and_operating_state(
+    test_database,
+):
+    record_ids = seed_general_track_waybill(test_database)
+
+    completed, message = SwitchListMoveService.complete_move(
+        record_ids["pickup_id"]
+    )
+    assert completed, message
+
+    returned, message = SwitchListMoveService.return_car_to_pickup(
+        record_ids["setout_id"]
+    )
+    assert returned, message
+
+    with test_database.SessionLocal() as session:
+        operations_session = session.get(
+            OperationsSession,
+            record_ids["operations_session_id"],
+        )
+        waybill = session.get(Waybill, record_ids["waybill_id"])
+        pickup = session.get(CarMove, record_ids["pickup_id"])
+        setout = session.get(CarMove, record_ids["setout_id"])
+        car = session.get(Car, record_ids["car_id"])
+        movements = session.execute(
+            select(CarMovement).order_by(CarMovement.id)
+        ).scalars().all()
+
+        assert operations_session.status == "PLANNED"
+        assert waybill.status == "ACTIVE"
+        assert waybill.completed_at is None
+        assert pickup.status == "PENDING"
+        assert pickup.completed_at is None
+        assert setout.status == "PENDING"
+        assert car.location == "Staging Yard - Eastbound"
         assert (
             car.operating_location_id
             == record_ids["source_location_id"]
         )
+        assert car.operating_track_id == record_ids["source_track_id"]
+        assert len(movements) == 2
+        assert movements[1].movement_type == "RETURN"
+        assert movements[1].from_location == "On Train: 101 - Weston Turn"
+        assert movements[1].to_location == "Staging Yard - Eastbound"
 
-        assert (
-            car.operating_track_id
-            == record_ids["source_track_id"]
+    assert SwitchListService.get_on_train_rows(
+        record_ids["operations_session_id"]
+    ) == []
+
+
+def test_session_cancellation_requires_onboard_cars_to_be_resolved(
+    test_database,
+):
+    record_ids = seed_general_track_waybill(test_database)
+
+    completed, message = SwitchListMoveService.complete_move(
+        record_ids["pickup_id"]
+    )
+    assert completed, message
+
+    cancelled, message = OperationsSessionService.cancel(
+        record_ids["operations_session_id"]
+    )
+    assert not cancelled
+    assert "TEST 1001" in message
+    assert "remain on trains" in message
+
+    returned, message = SwitchListMoveService.return_car_to_pickup(
+        record_ids["setout_id"]
+    )
+    assert returned, message
+
+    cancelled, result = OperationsSessionService.cancel(
+        record_ids["operations_session_id"]
+    )
+    assert cancelled, result
+    assert result.status == "CANCELLED"
+
+
+def test_started_operations_protect_moves_and_session_from_deletion(
+    test_database,
+):
+    record_ids = seed_general_track_waybill(test_database)
+
+    completed, message = SwitchListMoveService.complete_move(
+        record_ids["pickup_id"]
+    )
+    assert completed, message
+
+    can_delete, message = CarMoveService.can_delete_by_operations_session(
+        record_ids["operations_session_id"]
+    )
+    assert not can_delete
+    assert "TEST 1001" in message
+
+    deleted, message = CarMoveService.delete_by_operations_session(
+        record_ids["operations_session_id"]
+    )
+    assert not deleted
+    assert "operations have started" in message
+
+    deleted, message = CarMoveService.delete(record_ids["pickup_id"])
+    assert not deleted
+    assert "operations have started" in message
+
+    generated, result = CarMoveGenerationService.generate(
+        record_ids["operations_session_id"]
+    )
+    assert not generated
+    assert result["generated"] == 0
+    assert "TEST 1001" in result["messages"][0]
+
+    deleted, message = OperationsSessionService.delete(
+        record_ids["operations_session_id"]
+    )
+    assert not deleted
+    assert "TEST 1001" in message
+    assert "remain on trains" in message
+
+    with test_database.SessionLocal() as session:
+        assert session.get(
+            OperationsSession,
+            record_ids["operations_session_id"],
+        ) is not None
+        assert session.get(CarMove, record_ids["pickup_id"]) is not None
+        assert session.get(CarMove, record_ids["setout_id"]) is not None
+
+    returned, message = SwitchListMoveService.return_car_to_pickup(
+        record_ids["setout_id"]
+    )
+    assert returned, message
+
+    can_delete, message = CarMoveService.can_delete_by_operations_session(
+        record_ids["operations_session_id"]
+    )
+    assert can_delete, message
+
+    deleted, count = CarMoveService.delete_by_operations_session(
+        record_ids["operations_session_id"]
+    )
+    assert deleted
+    assert count == 2
+
+
+def test_failed_return_leaves_car_on_train_and_pickup_completed(
+    test_database,
+):
+    record_ids = seed_general_track_waybill(test_database)
+
+    completed, message = SwitchListMoveService.complete_move(
+        record_ids["pickup_id"]
+    )
+    assert completed, message
+
+    with test_database.SessionLocal() as session:
+        source_track = session.get(
+            LocationTrack,
+            record_ids["source_track_id"],
+        )
+        source_track.capacity = 0
+        session.commit()
+
+    returned, message = SwitchListMoveService.return_car_to_pickup(
+        record_ids["setout_id"]
+    )
+    assert not returned
+    assert "capacity" in message.casefold()
+
+    with test_database.SessionLocal() as session:
+        operations_session = session.get(
+            OperationsSession,
+            record_ids["operations_session_id"],
+        )
+        waybill = session.get(Waybill, record_ids["waybill_id"])
+        pickup = session.get(CarMove, record_ids["pickup_id"])
+        car = session.get(Car, record_ids["car_id"])
+        movement_count = session.scalar(
+            select(func.count()).select_from(CarMovement)
         )
 
-        assert car.location == "Staging Yard - Eastbound"
-
-        assert movement_count == 0
+        assert operations_session.status == "ACTIVE"
+        assert waybill.status == "IN_PROGRESS"
+        assert pickup.status == "COMPLETED"
+        assert car.location == "On Train: 101 - Weston Turn"
+        assert movement_count == 1
 
 
 @pytest.mark.parametrize(

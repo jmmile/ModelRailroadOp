@@ -799,6 +799,51 @@ class CarMoveGenerationService:
                 },
             )
 
+        existing_moves = (
+            CarMoveService.get_by_operations_session(
+                operations_session_id
+            )
+        )
+
+        completed_moves = [
+            move
+            for move in existing_moves
+            if move.status == "COMPLETED"
+        ]
+
+        if completed_moves:
+            affected_cars = sorted(
+                {
+                    (
+                        f"{move.car.reporting_mark} "
+                        f"{move.car.number}"
+                    )
+                    for move in completed_moves
+                    if move.car is not None
+                }
+            )
+            car_text = ", ".join(affected_cars)
+
+            return (
+                False,
+                {
+                    "generated": 0,
+                    "skipped": 0,
+                    "messages": [
+                        (
+                            "Car Moves cannot be generated after operations "
+                            "have started. Return or complete the existing "
+                            "work first."
+                            + (
+                                f" Affected cars: {car_text}."
+                                if car_text
+                                else ""
+                            )
+                        )
+                    ],
+                },
+            )
+
         assignments = (
             OperationsSessionTrainService.get_by_operations_session(
                 operations_session_id
@@ -807,12 +852,6 @@ class CarMoveGenerationService:
 
         waybills = (
             CarMoveGenerationService.get_waybills_for_session(
-                operations_session_id
-            )
-        )
-
-        existing_moves = (
-            CarMoveService.get_by_operations_session(
                 operations_session_id
             )
         )

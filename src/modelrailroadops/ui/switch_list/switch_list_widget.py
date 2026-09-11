@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QMessageBox,
+    QProgressBar,
     QPushButton,
     QTableView,
     QVBoxLayout,
@@ -38,6 +39,9 @@ from modelrailroadops.services.switch_list_service import (
 from modelrailroadops.ui.models.switch_list_table_model import (
     SwitchListTableModel,
 )
+from modelrailroadops.ui.models.on_train_table_model import (
+    OnTrainTableModel,
+)
 
 from modelrailroadops.ui.styles import (
     TABLE_SELECTION_STYLE,
@@ -45,6 +49,9 @@ from modelrailroadops.ui.styles import (
 
 from modelrailroadops.ui.switch_list.switch_list_preview_dialog import (
     SwitchListPreviewDialog,
+)
+from modelrailroadops.ui.switch_list.completed_session_report_dialog import (
+    CompletedSessionReportDialog,
 )
 
 
@@ -133,6 +140,18 @@ class SwitchListWidget(QWidget):
             self.preview_button
         )
 
+        self.completed_report_button = QPushButton(
+            "Completed Session Report"
+        )
+        self.completed_report_button.setEnabled(False)
+        session_layout.addWidget(self.completed_report_button)
+
+        self.check_session_data_button = QPushButton(
+            "Check Session Data"
+        )
+        self.check_session_data_button.setEnabled(False)
+        session_layout.addWidget(self.check_session_data_button)
+
         #
         # Complete Move button
         #
@@ -214,6 +233,17 @@ class SwitchListWidget(QWidget):
             self.train_combo
         )
 
+        train_layout.addWidget(
+            QLabel("Show:")
+        )
+
+        self.move_filter_combo = QComboBox()
+        self.move_filter_combo.addItem("All Moves", "ALL")
+        self.move_filter_combo.addItem("Pending", "PENDING")
+        self.move_filter_combo.addItem("Cars On Train", "ON_TRAIN")
+        self.move_filter_combo.addItem("Completed", "COMPLETED")
+        train_layout.addWidget(self.move_filter_combo)
+
         train_layout.addStretch()
 
         layout.addLayout(
@@ -241,6 +271,25 @@ class SwitchListWidget(QWidget):
         layout.addWidget(
             self.status_label
         )
+
+        self.progress_summary_label = QLabel(
+            "Pending Pickups: 0 | Cars On Train: 0 | "
+            "Pending Set-outs: 0 | Completed: 0"
+        )
+        layout.addWidget(self.progress_summary_label)
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setFormat("Session Progress: 0%")
+        layout.addWidget(self.progress_bar)
+
+        self.progress_warning_label = QLabel()
+        self.progress_warning_label.setStyleSheet(
+            "color: #a64b00; font-weight: bold;"
+        )
+        self.progress_warning_label.setVisible(False)
+        layout.addWidget(self.progress_warning_label)
 
         #
         # Table model
@@ -303,6 +352,60 @@ class SwitchListWidget(QWidget):
         )
 
         #
+        # Cars currently aboard trains
+        #
+
+        self.on_train_label = QLabel(
+            "Cars On Train: 0"
+        )
+
+        on_train_label_font = self.on_train_label.font()
+        on_train_label_font.setBold(True)
+        self.on_train_label.setFont(on_train_label_font)
+
+        on_train_heading_layout = QHBoxLayout()
+        on_train_heading_layout.addWidget(self.on_train_label)
+
+        self.return_to_pickup_button = QPushButton(
+            "Return Car to Pickup Location"
+        )
+        self.return_to_pickup_button.setEnabled(False)
+        on_train_heading_layout.addWidget(
+            self.return_to_pickup_button
+        )
+        on_train_heading_layout.addStretch()
+
+        layout.addLayout(on_train_heading_layout)
+
+        self.on_train_model = OnTrainTableModel(self)
+        self.on_train_table = QTableView()
+        self.on_train_table.setModel(self.on_train_model)
+        self.on_train_table.setStyleSheet(TABLE_SELECTION_STYLE)
+        self.on_train_table.setSelectionBehavior(
+            QAbstractItemView.SelectRows
+        )
+        self.on_train_table.setSelectionMode(
+            QAbstractItemView.SingleSelection
+        )
+        self.on_train_table.setEditTriggers(
+            QAbstractItemView.NoEditTriggers
+        )
+        self.on_train_table.setSortingEnabled(True)
+        self.on_train_table.verticalHeader().setVisible(False)
+        self.on_train_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeToContents
+        )
+        self.on_train_table.horizontalHeader().setStretchLastSection(
+            True
+        )
+        self.on_train_table.setMinimumHeight(120)
+        self.on_train_table.setMaximumHeight(220)
+
+        layout.addWidget(
+            self.on_train_table
+        )
+
+        #
         # Signals
         #
 
@@ -312,6 +415,14 @@ class SwitchListWidget(QWidget):
 
         self.preview_button.clicked.connect(
             self.preview_switch_list
+        )
+
+        self.completed_report_button.clicked.connect(
+            self.preview_completed_session_report
+        )
+
+        self.check_session_data_button.clicked.connect(
+            self.check_selected_session_data
         )
 
         self.complete_move_button.clicked.connect(
@@ -334,8 +445,20 @@ class SwitchListWidget(QWidget):
             self.train_changed
         )
 
+        self.move_filter_combo.currentIndexChanged.connect(
+            self.move_filter_changed
+        )
+
         self.table.selectionModel().selectionChanged.connect(
             self.selection_changed
+        )
+
+        self.on_train_table.selectionModel().selectionChanged.connect(
+            self.on_train_selection_changed
+        )
+
+        self.return_to_pickup_button.clicked.connect(
+            self.return_selected_car_to_pickup
         )
 
         #
@@ -466,6 +589,23 @@ class SwitchListWidget(QWidget):
             None
         )
 
+        self.on_train_model.set_context(None)
+        self.on_train_label.setText("Cars On Train: 0")
+        self.return_to_pickup_button.setEnabled(False)
+
+        self.move_filter_combo.blockSignals(True)
+        self.move_filter_combo.setCurrentIndex(0)
+        self.move_filter_combo.blockSignals(False)
+        self.model.set_filter("ALL")
+        self.progress_summary_label.setText(
+            "Pending Pickups: 0 | Cars On Train: 0 | "
+            "Pending Set-outs: 0 | Completed: 0"
+        )
+        self.progress_bar.setValue(0)
+        self.progress_bar.setFormat("Session Progress: 0%")
+        self.progress_warning_label.clear()
+        self.progress_warning_label.setVisible(False)
+
         self.train_combo.blockSignals(
             True
         )
@@ -492,6 +632,9 @@ class SwitchListWidget(QWidget):
         self.preview_button.setEnabled(
             False
         )
+
+        self.completed_report_button.setEnabled(False)
+        self.check_session_data_button.setEnabled(False)
 
         self.complete_move_button.setEnabled(
             False
@@ -679,6 +822,11 @@ class SwitchListWidget(QWidget):
             train_id
         )
 
+        self.refresh_on_train_table(
+            operations_session_id,
+            train_id,
+        )
+
         self.table.sortByColumn(
             1,
             Qt.AscendingOrder,
@@ -701,7 +849,99 @@ class SwitchListWidget(QWidget):
             train_id
         )
 
+    def move_filter_changed(self, index):
+        filter_mode = self.move_filter_combo.itemData(index)
+        self.model.set_filter(filter_mode)
+        self.table.sortByColumn(1, Qt.AscendingOrder)
+        self.table.resizeColumnsToContents()
+        self.table.clearSelection()
+        self.complete_move_button.setEnabled(False)
+        self.update_status(self.train_combo.currentData())
+
     #
+    #
+    # Refresh Cars On Train
+    #
+
+    def refresh_on_train_table(
+        self,
+        operations_session_id,
+        train_id,
+    ):
+        self.on_train_model.set_context(
+            operations_session_id,
+            train_id,
+        )
+
+        count = self.on_train_model.rowCount()
+        self.on_train_label.setText(
+            f"Cars On Train: {count}"
+        )
+        self.on_train_table.resizeColumnsToContents()
+        self.on_train_table.clearSelection()
+        self.return_to_pickup_button.setEnabled(False)
+
+    def on_train_selection_changed(
+        self,
+        selected,
+        deselected,
+    ):
+        self.return_to_pickup_button.setEnabled(
+            self.on_train_table.currentIndex().isValid()
+        )
+
+    def return_selected_car_to_pickup(self):
+        index = self.on_train_table.currentIndex()
+
+        if not index.isValid():
+            return
+
+        row = self.on_train_model.get_row(index.row())
+
+        if row is None:
+            return
+
+        car_name = row.get("car", "") or "this car"
+        train_name = row.get("train", "") or "the selected train"
+        origin = row.get("origin", "") or "its pickup location"
+
+        answer = QMessageBox.question(
+            self,
+            "Return Car to Pickup Location",
+            (
+                f"Return {car_name} from {train_name} to {origin}?\n\n"
+                "This will restore the PICKUP instruction to PENDING "
+                "and the Waybill to ACTIVE."
+            ),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+
+        if answer != QMessageBox.Yes:
+            return
+
+        success, message = (
+            SwitchListMoveService.return_car_to_pickup(
+                row.get("car_move_id")
+            )
+        )
+
+        if not success:
+            QMessageBox.warning(
+                self,
+                "Return Car Failed",
+                message,
+            )
+            self.refresh()
+            return
+
+        self.refresh()
+        QMessageBox.information(
+            self,
+            "Car Returned",
+            message,
+        )
+
     #
     # Update Operations Session completion state
     #
@@ -748,13 +988,16 @@ class SwitchListWidget(QWidget):
         self,
         train_id,
     ):
-        count = (
+        visible_count = (
             self.model.rowCount()
         )
+        all_rows = self.model.all_rows
+        total_count = len(all_rows)
 
         if train_id is None:
             status_text = (
-                f"Switch List Status: {count} moves - All Trains"
+                "Switch List Status: "
+                f"{visible_count} of {total_count} moves shown - All Trains"
             )
 
         else:
@@ -763,8 +1006,63 @@ class SwitchListWidget(QWidget):
             )
 
             status_text = (
-                f"Switch List Status: {count} moves - {train_name}"
+                "Switch List Status: "
+                f"{visible_count} of {total_count} moves shown - {train_name}"
             )
+
+        pending_pickups = sum(
+            1
+            for row in all_rows
+            if (
+                row.get("move_type") == "PICKUP"
+                and row.get("move_status") == "PENDING"
+            )
+        )
+        pending_setouts = sum(
+            1
+            for row in all_rows
+            if (
+                row.get("move_type") == "SETOUT"
+                and row.get("move_status") == "PENDING"
+            )
+        )
+        completed_moves = sum(
+            1
+            for row in all_rows
+            if row.get("move_status") == "COMPLETED"
+        )
+        onboard_count = self.on_train_model.rowCount()
+        blocked_setouts = sum(
+            1
+            for row in self.on_train_model.rows
+            if not row.get("can_setout", False)
+        )
+        completion_percent = (
+            round(completed_moves * 100 / total_count)
+            if total_count
+            else 0
+        )
+
+        self.progress_summary_label.setText(
+            f"Pending Pickups: {pending_pickups} | "
+            f"Cars On Train: {onboard_count} | "
+            f"Pending Set-outs: {pending_setouts} | "
+            f"Completed: {completed_moves} of {total_count}"
+        )
+        self.progress_bar.setValue(completion_percent)
+        self.progress_bar.setFormat(
+            f"Session Progress: {completion_percent}%"
+        )
+
+        if blocked_setouts:
+            self.progress_warning_label.setText(
+                f"Warning: {blocked_setouts} onboard car(s) "
+                "currently have a blocked set-out."
+            )
+            self.progress_warning_label.setVisible(True)
+        else:
+            self.progress_warning_label.clear()
+            self.progress_warning_label.setVisible(False)
 
         session_ready = (
             self.update_session_completion_state()
@@ -812,6 +1110,11 @@ class SwitchListWidget(QWidget):
             operations_session_id
         )
 
+        self.refresh_on_train_table(
+            operations_session_id,
+            train_id,
+        )
+
         self.table.sortByColumn(
             1,
             Qt.AscendingOrder,
@@ -829,6 +1132,21 @@ class SwitchListWidget(QWidget):
         self.preview_button.setEnabled(
             True
         )
+
+        with SessionLocal() as session:
+            operations_session = session.get(
+                OperationsSession,
+                operations_session_id,
+            )
+            session_is_completed = (
+                operations_session is not None
+                and operations_session.status == "COMPLETED"
+            )
+
+        self.completed_report_button.setEnabled(
+            session_is_completed
+        )
+        self.check_session_data_button.setEnabled(True)
 
         self.complete_move_button.setEnabled(
             False
@@ -1239,6 +1557,87 @@ class SwitchListWidget(QWidget):
         )
 
         dialog.exec()
+
+    def preview_completed_session_report(self):
+        operations_session_id = self.session_combo.currentData()
+        if operations_session_id is None:
+            return
+
+        dialog = CompletedSessionReportDialog(
+            operations_session_id=operations_session_id,
+            parent=self,
+        )
+        dialog.exec()
+
+    def check_selected_session_data(self):
+        operations_session_id = self.session_combo.currentData()
+        if operations_session_id is None:
+            return
+
+        result = SwitchListService.check_session_consistency(
+            operations_session_id
+        )
+        if result is None:
+            QMessageBox.warning(
+                self,
+                "Session Data Check",
+                "The Operations Session could not be found.",
+            )
+            return
+
+        if not result["issues"]:
+            QMessageBox.information(
+                self,
+                "Session Data Check",
+                "No session data inconsistencies were found.",
+            )
+            return
+
+        issue_text = "\n".join(
+            f"• {issue}" for issue in result["issues"]
+        )
+        if not result["can_remove_stale_pending_moves"]:
+            QMessageBox.warning(
+                self,
+                "Session Data Inconsistencies",
+                issue_text,
+            )
+            return
+
+        answer = QMessageBox.question(
+            self,
+            "Remove Stale Pending Moves?",
+            (
+                f"{issue_text}\n\n"
+                "This appears to be legacy session data. Remove only the "
+                f"{result['pending_move_count']} stale PENDING move "
+                "instruction(s)?\n\n"
+                "This will not change waybills, car locations, or car history. "
+                "Choose No to leave everything unchanged."
+            ),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
+            return
+
+        success, message = SwitchListService.remove_stale_pending_moves(
+            operations_session_id
+        )
+        if not success:
+            QMessageBox.warning(
+                self,
+                "Session Cleanup Failed",
+                message,
+            )
+            return
+
+        self.refresh()
+        QMessageBox.information(
+            self,
+            "Session Cleanup Complete",
+            message,
+        )
 
     #
     # Refresh

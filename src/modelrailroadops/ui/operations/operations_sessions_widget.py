@@ -9,12 +9,14 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QMessageBox,
     QPushButton,
     QTableView,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -500,6 +502,9 @@ class OperationsSessionsWidget(QWidget):
     LOCOMOTIVE_ID_ROLE = 35
     PASSENGER_CAR_ASSIGNMENT_ID_ROLE = 36
     PASSENGER_CAR_ID_ROLE = 37
+    COMPLETED_PASSENGER_MESSAGE = (
+        "Completed — retained for printing"
+    )
 
     def __init__(
         self,
@@ -513,6 +518,10 @@ class OperationsSessionsWidget(QWidget):
         layout = QVBoxLayout(
             self
         )
+
+        #
+        # Session controls
+        #
 
         button_layout = QHBoxLayout()
 
@@ -578,6 +587,10 @@ class OperationsSessionsWidget(QWidget):
             button_layout
         )
 
+        #
+        # Operations Sessions table
+        #
+
         self.model = (
             OperationsSessionTableModel()
         )
@@ -620,15 +633,68 @@ class OperationsSessionsWidget(QWidget):
             False
         )
 
+
+
+        self.table.setMinimumHeight(
+            180
+        )
+
+
+
         layout.addWidget(
             self.table
         )
+
+        #
+        # Operations Session subtabs
+        #
+
+        self.details_tabs = QTabWidget()
+
+        self.overview_tab = QWidget()
+        self.freight_tab = QWidget()
+        self.passenger_tab = QWidget()
+
+        self.overview_layout = QVBoxLayout(
+            self.overview_tab
+        )
+
+        self.freight_layout = QVBoxLayout(
+            self.freight_tab
+        )
+
+        self.passenger_layout = QVBoxLayout(
+            self.passenger_tab
+        )
+
+        self.details_tabs.addTab(
+            self.overview_tab,
+            "Overview",
+        )
+
+        self.details_tabs.addTab(
+            self.freight_tab,
+            "Freight",
+        )
+
+        self.details_tabs.addTab(
+            self.passenger_tab,
+            "Passenger",
+        )
+
+        layout.addWidget(
+            self.details_tabs
+        )
+
+        #
+        # Overview - Assigned Trains
+        #
 
         self.trains_label = QLabel(
             "Trains Assigned to Selected Session"
         )
 
-        layout.addWidget(
+        self.overview_layout.addWidget(
             self.trains_label
         )
 
@@ -646,10 +712,6 @@ class OperationsSessionsWidget(QWidget):
             "Refresh Trains"
         )
 
-        self.passenger_operator_sheet_button = QPushButton(
-            "Passenger Operator Sheet"
-        )
-
         train_button_layout.addWidget(
             self.add_train_button
         )
@@ -662,13 +724,9 @@ class OperationsSessionsWidget(QWidget):
             self.refresh_trains_button
         )
 
-        train_button_layout.addWidget(
-            self.passenger_operator_sheet_button
-        )
-
         train_button_layout.addStretch()
 
-        layout.addLayout(
+        self.overview_layout.addLayout(
             train_button_layout
         )
 
@@ -698,19 +756,19 @@ class OperationsSessionsWidget(QWidget):
             False
         )
 
-        layout.addWidget(
+        self.overview_layout.addWidget(
             self.train_table
         )
 
         #
-        # Motive Power
+        # Overview - Motive Power
         #
 
         self.locomotives_label = QLabel(
             "Motive Power - Select an assigned train"
         )
 
-        layout.addWidget(
+        self.overview_layout.addWidget(
             self.locomotives_label
         )
 
@@ -758,7 +816,7 @@ class OperationsSessionsWidget(QWidget):
 
         locomotive_button_layout.addStretch()
 
-        layout.addLayout(
+        self.overview_layout.addLayout(
             locomotive_button_layout
         )
 
@@ -788,7 +846,7 @@ class OperationsSessionsWidget(QWidget):
             False
         )
 
-        layout.addWidget(
+        self.overview_layout.addWidget(
             self.locomotive_table
         )
 
@@ -802,7 +860,7 @@ class OperationsSessionsWidget(QWidget):
             )
         )
 
-        layout.addWidget(
+        self.overview_layout.addWidget(
             self.train_power_summary_label
         )
 
@@ -817,8 +875,385 @@ class OperationsSessionsWidget(QWidget):
         self.update_locomotive_table()
 
         #
-        # Passenger Consist
+        # Overview - Route
         #
+
+        self.route_label = QLabel(
+            "Route - Select an assigned train"
+        )
+
+        self.overview_layout.addWidget(
+            self.route_label
+        )
+
+        self.route_model = (
+            TrainRouteTableModel()
+        )
+
+        self.route_table = QTableView()
+
+        self.route_table.setStyleSheet(
+            TABLE_SELECTION_STYLE
+        )
+
+        self.route_table.setModel(
+            self.route_model
+        )
+
+        self.route_table.setSelectionBehavior(
+            QAbstractItemView.SelectRows
+        )
+
+        self.route_table.setSelectionMode(
+            QAbstractItemView.SingleSelection
+        )
+
+        self.route_table.setAlternatingRowColors(
+            True
+        )
+
+        self.route_table.setEditTriggers(
+            QAbstractItemView.NoEditTriggers
+        )
+
+        self.route_table.setSortingEnabled(
+            False
+        )
+
+        self.route_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeToContents
+        )
+
+        self.route_table.horizontalHeader().setStretchLastSection(
+            True
+        )
+
+        self.route_table.verticalHeader().setVisible(
+            False
+        )
+
+        self.overview_layout.addWidget(
+            self.route_table
+        )
+
+        #
+        # Freight - Waybills
+        #
+
+        self.waybills_label = QLabel(
+            "Waybills for Selected Session"
+        )
+
+        self.freight_layout.addWidget(
+            self.waybills_label
+        )
+
+        self.waybill_model = (
+            WaybillTableModel()
+        )
+
+        self.waybill_table = QTableView()
+
+        self.waybill_table.setStyleSheet(
+            TABLE_SELECTION_STYLE
+        )
+
+        self.waybill_table.setModel(
+            self.waybill_model
+        )
+
+        self.waybill_table.setSelectionBehavior(
+            QAbstractItemView.SelectRows
+        )
+
+        self.waybill_table.setSelectionMode(
+            QAbstractItemView.SingleSelection
+        )
+
+        self.waybill_table.setAlternatingRowColors(
+            True
+        )
+
+        self.waybill_table.setSortingEnabled(
+            False
+        )
+
+        self.waybill_table.setEditTriggers(
+            QAbstractItemView.NoEditTriggers
+        )
+
+        self.waybill_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeToContents
+        )
+
+        self.waybill_table.horizontalHeader().setStretchLastSection(
+            True
+        )
+
+        self.waybill_table.verticalHeader().setVisible(
+            False
+        )
+
+        self.freight_layout.addWidget(
+            self.waybill_table
+        )
+
+        #
+        # Freight - Car Moves
+        #
+
+        self.car_moves_label = QLabel(
+            "Car Moves for Selected Session"
+        )
+
+        self.freight_layout.addWidget(
+            self.car_moves_label
+        )
+
+        car_move_button_layout = QHBoxLayout()
+
+        self.generate_car_moves_button = QPushButton(
+            "Generate Car Moves"
+        )
+
+        self.refresh_car_moves_button = QPushButton(
+            "Refresh Car Moves"
+        )
+
+        self.delete_car_moves_button = QPushButton(
+            "Delete Car Moves"
+        )
+
+        car_move_button_layout.addWidget(
+            self.generate_car_moves_button
+        )
+
+        car_move_button_layout.addWidget(
+            self.refresh_car_moves_button
+        )
+
+        car_move_button_layout.addWidget(
+            self.delete_car_moves_button
+        )
+
+        car_move_button_layout.addStretch()
+
+        self.freight_layout.addLayout(
+            car_move_button_layout
+        )
+
+        self.car_move_model = (
+            CarMoveTableModel()
+        )
+
+        self.car_move_table = QTableView()
+
+        self.car_move_table.setStyleSheet(
+            TABLE_SELECTION_STYLE
+        )
+
+        self.car_move_table.setModel(
+            self.car_move_model
+        )
+
+        self.car_move_table.setSelectionBehavior(
+            QAbstractItemView.SelectRows
+        )
+
+        self.car_move_table.setSelectionMode(
+            QAbstractItemView.SingleSelection
+        )
+
+        self.car_move_table.setAlternatingRowColors(
+            True
+        )
+
+        self.car_move_table.setSortingEnabled(
+            False
+        )
+
+        self.car_move_table.setEditTriggers(
+            QAbstractItemView.NoEditTriggers
+        )
+
+        self.car_move_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeToContents
+        )
+
+        self.car_move_table.horizontalHeader().setStretchLastSection(
+            True
+        )
+
+        self.car_move_table.verticalHeader().setVisible(
+            False
+        )
+
+        self.freight_layout.addWidget(
+            self.car_move_table
+        )
+
+        #
+        # Passenger
+        #
+
+        self.passenger_trains_label = QLabel(
+            "Passenger Trains Assigned to Selected Session"
+        )
+
+        self.passenger_layout.addWidget(
+            self.passenger_trains_label
+        )
+
+        self.passenger_train_table = QTableView()
+
+        self.passenger_train_table.setStyleSheet(
+            TABLE_SELECTION_STYLE
+        )
+
+        self.passenger_train_table.setSelectionBehavior(
+            QAbstractItemView.SelectRows
+        )
+
+        self.passenger_train_table.setSelectionMode(
+            QAbstractItemView.SingleSelection
+        )
+
+        self.passenger_train_table.setAlternatingRowColors(
+            True
+        )
+
+        self.passenger_train_table.setEditTriggers(
+            QAbstractItemView.NoEditTriggers
+        )
+
+        self.passenger_train_table.verticalHeader().setVisible(
+            False
+        )
+
+        self.passenger_layout.addWidget(
+            self.passenger_train_table
+        )
+
+        self.passenger_train_summary_label = QLabel(
+            "Selected Passenger Train"
+        )
+
+        self.passenger_layout.addWidget(
+            self.passenger_train_summary_label
+        )
+
+        self.passenger_train_summary_widget = QWidget()
+
+        passenger_train_summary_layout = QGridLayout(
+            self.passenger_train_summary_widget
+        )
+
+        passenger_train_summary_layout.setContentsMargins(
+            0,
+            4,
+            0,
+            4,
+        )
+
+        self.passenger_train_summary_values = {}
+
+        for column, field_name in enumerate(
+            ("Symbol", "Name", "Direction")
+        ):
+
+            field_label = QLabel(f"{field_name}:")
+            value_label = QLabel("—")
+
+            passenger_train_summary_layout.addWidget(
+                field_label,
+                0,
+                column * 2,
+            )
+
+            passenger_train_summary_layout.addWidget(
+                value_label,
+                0,
+                column * 2 + 1,
+            )
+
+            self.passenger_train_summary_values[field_name] = value_label
+
+        for column, field_name in enumerate(
+            ("Origin", "Destination", "Route timing")
+        ):
+
+            field_label = QLabel(f"{field_name}:")
+            value_label = QLabel("—")
+
+            passenger_train_summary_layout.addWidget(
+                field_label,
+                1,
+                column * 2,
+            )
+
+            passenger_train_summary_layout.addWidget(
+                value_label,
+                1,
+                column * 2 + 1,
+            )
+
+            self.passenger_train_summary_values[field_name] = value_label
+
+        passenger_train_summary_layout.setColumnStretch(
+            3,
+            1,
+        )
+
+        passenger_train_summary_layout.setColumnStretch(
+            5,
+            2,
+        )
+
+        route_label = QLabel("Route:")
+        route_value_label = QLabel("—")
+        route_value_label.setWordWrap(True)
+
+        passenger_train_summary_layout.addWidget(
+            route_label,
+            2,
+            0,
+        )
+
+        passenger_train_summary_layout.addWidget(
+            route_value_label,
+            2,
+            1,
+            1,
+            5,
+        )
+
+        self.passenger_train_summary_values[
+            "Route"
+        ] = route_value_label
+
+        self.passenger_layout.addWidget(
+            self.passenger_train_summary_widget
+        )
+
+        passenger_sheet_button_layout = QHBoxLayout()
+
+        self.passenger_operator_sheet_button = QPushButton(
+            "Passenger Operator Sheet"
+        )
+
+        font = self.passenger_operator_sheet_button.font()
+        font.setBold(True)
+        self.passenger_operator_sheet_button.setFont(font)
+
+        passenger_sheet_button_layout.addWidget(
+            self.passenger_operator_sheet_button
+        )
+
+        passenger_sheet_button_layout.addStretch()
+
+        self.passenger_layout.addLayout(
+            passenger_sheet_button_layout
+        )
 
         self.passenger_consist_widget = QWidget()
 
@@ -839,6 +1274,18 @@ class OperationsSessionsWidget(QWidget):
 
         passenger_consist_layout.addWidget(
             self.passenger_consist_label
+        )
+
+        self.passenger_consist_status_label = QLabel(
+            self.COMPLETED_PASSENGER_MESSAGE
+        )
+
+        self.passenger_consist_status_label.setVisible(
+            False
+        )
+
+        passenger_consist_layout.addWidget(
+            self.passenger_consist_status_label
         )
 
         passenger_car_button_layout = QHBoxLayout()
@@ -919,11 +1366,17 @@ class OperationsSessionsWidget(QWidget):
             self.passenger_car_table
         )
 
-        layout.addWidget(
+        self.passenger_layout.addWidget(
             self.passenger_consist_widget
         )
 
+        self.passenger_layout.addStretch()
+
         self.passenger_car_table_model_data = []
+
+        self.passenger_train_table_model_data = []
+
+        self.update_passenger_train_table()
 
         self.update_passenger_car_table()
 
@@ -932,214 +1385,8 @@ class OperationsSessionsWidget(QWidget):
         )
 
         #
-        # Route
+        # Signal connections
         #
-
-        self.route_label = QLabel(
-            "Route - Select an assigned train"
-        )
-
-        layout.addWidget(
-            self.route_label
-        )
-
-        self.route_model = (
-            TrainRouteTableModel()
-        )
-
-        self.route_table = QTableView()
-
-        self.route_table.setStyleSheet(
-            TABLE_SELECTION_STYLE
-        )
-
-        self.route_table.setModel(
-            self.route_model
-        )
-
-        self.route_table.setSelectionBehavior(
-            QAbstractItemView.SelectRows
-        )
-
-        self.route_table.setSelectionMode(
-            QAbstractItemView.SingleSelection
-        )
-
-        self.route_table.setAlternatingRowColors(
-            True
-        )
-
-        self.route_table.setEditTriggers(
-            QAbstractItemView.NoEditTriggers
-        )
-
-        self.route_table.setSortingEnabled(
-            False
-        )
-
-        self.route_table.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeToContents
-        )
-
-        self.route_table.horizontalHeader().setStretchLastSection(
-            True
-        )
-
-        self.route_table.verticalHeader().setVisible(
-            False
-        )
-
-        layout.addWidget(
-            self.route_table
-        )
-
-        self.waybills_label = QLabel(
-            "Waybills for Selected Session"
-        )
-
-        layout.addWidget(
-            self.waybills_label
-        )
-
-        self.waybill_model = (
-            WaybillTableModel()
-        )
-
-        self.waybill_table = QTableView()
-
-        self.waybill_table.setStyleSheet(
-            TABLE_SELECTION_STYLE
-        )
-
-        self.waybill_table.setModel(
-            self.waybill_model
-        )
-
-        self.waybill_table.setSelectionBehavior(
-            QAbstractItemView.SelectRows
-        )
-
-        self.waybill_table.setSelectionMode(
-            QAbstractItemView.SingleSelection
-        )
-
-        self.waybill_table.setAlternatingRowColors(
-            True
-        )
-
-        self.waybill_table.setSortingEnabled(
-            False
-        )
-
-        self.waybill_table.setEditTriggers(
-            QAbstractItemView.NoEditTriggers
-        )
-
-        self.waybill_table.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeToContents
-        )
-
-        self.waybill_table.horizontalHeader().setStretchLastSection(
-            True
-        )
-
-        self.waybill_table.verticalHeader().setVisible(
-            False
-        )
-
-        layout.addWidget(
-            self.waybill_table
-        )
-
-        self.car_moves_label = QLabel(
-            "Car Moves for Selected Session"
-        )
-
-        layout.addWidget(
-            self.car_moves_label
-        )
-
-        car_move_button_layout = QHBoxLayout()
-
-        self.generate_car_moves_button = QPushButton(
-            "Generate Car Moves"
-        )
-
-        self.refresh_car_moves_button = QPushButton(
-            "Refresh Car Moves"
-        )
-
-        self.delete_car_moves_button = QPushButton(
-            "Delete Car Moves"
-        )
-
-        car_move_button_layout.addWidget(
-            self.generate_car_moves_button
-        )
-
-        car_move_button_layout.addWidget(
-            self.refresh_car_moves_button
-        )
-
-        car_move_button_layout.addWidget(
-            self.delete_car_moves_button
-        )
-
-        car_move_button_layout.addStretch()
-
-        layout.addLayout(
-            car_move_button_layout
-        )
-
-        self.car_move_model = (
-            CarMoveTableModel()
-        )
-
-        self.car_move_table = QTableView()
-
-        self.car_move_table.setStyleSheet(
-            TABLE_SELECTION_STYLE
-        )
-
-        self.car_move_table.setModel(
-            self.car_move_model
-        )
-
-        self.car_move_table.setSelectionBehavior(
-            QAbstractItemView.SelectRows
-        )
-
-        self.car_move_table.setSelectionMode(
-            QAbstractItemView.SingleSelection
-        )
-
-        self.car_move_table.setAlternatingRowColors(
-            True
-        )
-
-        self.car_move_table.setSortingEnabled(
-            False
-        )
-
-        self.car_move_table.setEditTriggers(
-            QAbstractItemView.NoEditTriggers
-        )
-
-        self.car_move_table.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeToContents
-        )
-
-        self.car_move_table.horizontalHeader().setStretchLastSection(
-            True
-        )
-
-        self.car_move_table.verticalHeader().setVisible(
-            False
-        )
-
-        layout.addWidget(
-            self.car_move_table
-        )
 
         self.add_button.clicked.connect(
             self.add_session
@@ -1319,6 +1566,8 @@ class OperationsSessionsWidget(QWidget):
             self.clear_waybills()
             self.clear_car_moves()
 
+            self.update_passenger_consist_read_only_state()
+
             return
 
         operations_session = (
@@ -1339,6 +1588,8 @@ class OperationsSessionsWidget(QWidget):
             operations_session
         )
 
+        self.update_passenger_consist_read_only_state()
+
     def load_trains_for_session(
         self,
         operations_session,
@@ -1357,6 +1608,8 @@ class OperationsSessionsWidget(QWidget):
         )
 
         self.train_table_model_data = []
+
+        self.passenger_train_table_model_data = []
 
         for assignment in assignments:
 
@@ -1392,14 +1645,31 @@ class OperationsSessionsWidget(QWidget):
                 )
             )
 
+            if (
+                train.train_type
+                or ""
+            ).strip().upper() == "PASSENGER":
+
+                self.passenger_train_table_model_data.append(
+                    (
+                        assignment.id,
+                        train.id,
+                        train.symbol,
+                        train.name,
+                        getattr(train, "origin", None),
+                        getattr(train, "destination", None),
+                        getattr(train, "direction", None),
+                    )
+                )
+
         self.update_train_table()
+
+        self.update_passenger_train_table()
 
         self.clear_route()
         self.clear_locomotives()
-        self.clear_passenger_cars()
-        self.passenger_consist_widget.setVisible(
-            False
-        )
+        self.clear_passenger_selection()
+
         self.clear_train_weight_summary()
 
     def get_train(
@@ -1494,6 +1764,72 @@ class OperationsSessionsWidget(QWidget):
             self.train_selection_changed
         )
 
+    def update_passenger_train_table(
+        self,
+    ):
+
+        model = QStandardItemModel(
+            self
+        )
+
+        model.setHorizontalHeaderLabels(
+            [
+                "Symbol",
+                "Name",
+                "Origin",
+                "Destination",
+                "Direction",
+            ]
+        )
+
+        for (
+            assignment_id,
+            train_id,
+            number,
+            name,
+            origin,
+            destination,
+            direction,
+        ) in self.passenger_train_table_model_data:
+
+            items = [
+                QStandardItem(number or ""),
+                QStandardItem(name or ""),
+                QStandardItem(origin or ""),
+                QStandardItem(destination or ""),
+                QStandardItem(direction or ""),
+            ]
+
+            items[0].setData(
+                assignment_id,
+                self.ASSIGNMENT_ID_ROLE,
+            )
+
+            items[0].setData(
+                train_id,
+                self.TRAIN_ID_ROLE,
+            )
+
+            model.appendRow(
+                items
+            )
+
+        self.passenger_train_table.setModel(
+            model
+        )
+
+        self.passenger_train_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeToContents
+        )
+
+        self.passenger_train_table.horizontalHeader().setStretchLastSection(
+            True
+        )
+
+        self.passenger_train_table.selectionModel().selectionChanged.connect(
+            self.passenger_train_selection_changed
+        )
+
     def train_selection_changed(
         self,
         selected,
@@ -1510,23 +1846,12 @@ class OperationsSessionsWidget(QWidget):
 
         if train_id is None:
 
-            self.passenger_operator_sheet_button.setEnabled(
-                False
-            )
-
             self.clear_route()
             self.clear_locomotives()
-            self.clear_passenger_cars()
-            self.passenger_consist_widget.setVisible(
-                False
-            )
+
             self.clear_train_weight_summary()
 
             return
-
-        train = self.get_train(
-            train_id
-        )
 
         self.load_route_for_train(
             train_id
@@ -1536,22 +1861,33 @@ class OperationsSessionsWidget(QWidget):
             assignment_id
         )
 
-        if (
-            train is not None
-            and (
-                train.train_type
-                or ""
-            ).strip().upper()
-            == "PASSENGER"
-        ):
+        self.update_train_weight_summary()
 
-            self.passenger_operator_sheet_button.setEnabled(
-                True
-            )
+    def passenger_train_selection_changed(
+        self,
+        selected,
+        deselected,
+    ):
 
-            self.passenger_consist_widget.setVisible(
-                True
-            )
+        assignment_id = (
+            self.get_selected_passenger_train_assignment_id_without_message()
+        )
+
+        has_selection = assignment_id is not None
+
+        self.passenger_operator_sheet_button.setEnabled(
+            has_selection
+        )
+
+        self.update_passenger_consist_read_only_state()
+
+        self.passenger_consist_widget.setVisible(
+            has_selection
+        )
+
+        self.update_passenger_train_summary()
+
+        if has_selection:
 
             self.load_passenger_cars_for_train_assignment(
                 assignment_id
@@ -1559,17 +1895,164 @@ class OperationsSessionsWidget(QWidget):
 
         else:
 
-            self.passenger_operator_sheet_button.setEnabled(
-                False
-            )
-
             self.clear_passenger_cars()
 
-            self.passenger_consist_widget.setVisible(
-                False
+    @staticmethod
+    def format_passenger_route_timing(
+        train,
+        routes,
+    ):
+
+        departure = getattr(
+            train,
+            "scheduled_departure",
+            None,
+        )
+
+        arrival = getattr(
+            train,
+            "scheduled_arrival",
+            None,
+        )
+
+        if routes:
+
+            if departure is None:
+                departure = (
+                    routes[0].departure_time
+                    or routes[0].arrival_time
+                )
+
+            if arrival is None:
+                arrival = (
+                    routes[-1].arrival_time
+                    or routes[-1].departure_time
+                )
+
+        def time_text(value):
+
+            if value is None:
+                return None
+
+            return value.strftime(
+                "%I:%M %p"
+            ).lstrip("0")
+
+        departure_text = time_text(departure)
+        arrival_text = time_text(arrival)
+
+        if departure_text and arrival_text:
+            return f"{departure_text} → {arrival_text}"
+
+        if departure_text:
+            return f"Departs {departure_text}"
+
+        if arrival_text:
+            return f"Arrives {arrival_text}"
+
+        return "—"
+
+    @staticmethod
+    def format_passenger_route_stops(
+        routes,
+    ):
+
+        if not routes:
+            return "—"
+
+        def time_text(value):
+
+            if value is None:
+                return None
+
+            return value.strftime(
+                "%I:%M %p"
+            ).lstrip("0")
+
+        stop_texts = []
+
+        for route in routes:
+
+            operating_location = getattr(
+                route,
+                "operating_location",
+                None,
             )
 
-        self.update_train_weight_summary()
+            location = (
+                getattr(operating_location, "name", None)
+                or route.location
+            )
+
+            times = []
+            arrival = time_text(route.arrival_time)
+            departure = time_text(route.departure_time)
+
+            if arrival:
+                times.append(f"Arr {arrival}")
+
+            if departure:
+                times.append(f"Dep {departure}")
+
+            if times:
+                stop_texts.append(
+                    f"{location} ({', '.join(times)})"
+                )
+            else:
+                stop_texts.append(str(location))
+
+        return " → ".join(stop_texts)
+
+    def update_passenger_train_summary(
+        self,
+    ):
+
+        train = self.get_train(
+            self.get_selected_passenger_train_id()
+        )
+
+        if train is None:
+
+            self.clear_passenger_train_summary()
+
+            return
+
+        routes = TrainRouteService.get_by_train(
+            train.id
+        )
+
+        values = {
+            "Symbol": train.symbol,
+            "Name": train.name,
+            "Origin": train.origin,
+            "Destination": train.destination,
+            "Direction": train.direction,
+            "Route timing": self.format_passenger_route_timing(
+                train,
+                routes,
+            ),
+            "Route": self.format_passenger_route_stops(
+                routes
+            ),
+        }
+
+        for field_name, value_label in (
+            self.passenger_train_summary_values.items()
+        ):
+
+            value_label.setText(
+                str(values.get(field_name) or "—")
+            )
+
+    def clear_passenger_train_summary(
+        self,
+    ):
+
+        for value_label in (
+            self.passenger_train_summary_values.values()
+        ):
+
+            value_label.setText("—")
 
     def preview_passenger_operator_sheet(
         self,
@@ -1580,11 +2063,11 @@ class OperationsSessionsWidget(QWidget):
         )
 
         assignment_id = (
-            self.get_selected_train_assignment_id_without_message()
+            self.get_selected_passenger_train_assignment_id_without_message()
         )
 
         train = self.get_train(
-            self.get_selected_train_id()
+            self.get_selected_passenger_train_id()
         )
 
         if (
@@ -1601,7 +2084,10 @@ class OperationsSessionsWidget(QWidget):
 
             return
 
-        if (train.train_type or "").strip().upper() != "PASSENGER":
+        if (
+            train.train_type
+            or ""
+        ).strip().upper() != "PASSENGER":
 
             QMessageBox.information(
                 self,
@@ -1644,6 +2130,68 @@ class OperationsSessionsWidget(QWidget):
         return indexes[0].data(
             self.TRAIN_ID_ROLE
         )
+
+    def get_selected_passenger_train_id(
+        self,
+    ):
+
+        selection_model = (
+            self.passenger_train_table.selectionModel()
+        )
+
+        if selection_model is None:
+
+            return None
+
+        indexes = selection_model.selectedRows()
+
+        if not indexes:
+
+            return None
+
+        return indexes[0].data(
+            self.TRAIN_ID_ROLE
+        )
+
+    def get_selected_passenger_train_assignment_id_without_message(
+        self,
+    ):
+
+        selection_model = (
+            self.passenger_train_table.selectionModel()
+        )
+
+        if selection_model is None:
+
+            return None
+
+        indexes = selection_model.selectedRows()
+
+        if not indexes:
+
+            return None
+
+        return indexes[0].data(
+            self.ASSIGNMENT_ID_ROLE
+        )
+
+    def get_selected_passenger_train_assignment_id(
+        self,
+    ):
+
+        assignment_id = (
+            self.get_selected_passenger_train_assignment_id_without_message()
+        )
+
+        if assignment_id is None:
+
+            QMessageBox.information(
+                self,
+                "Passenger Train Assignment",
+                "Please select a passenger train assignment.",
+            )
+
+        return assignment_id
 
     def get_selected_train_assignment_id_without_message(
         self,
@@ -2577,7 +3125,7 @@ class OperationsSessionsWidget(QWidget):
         self.update_passenger_car_table()
 
         train_id = (
-            self.get_selected_train_id()
+            self.get_selected_passenger_train_id()
         )
 
         train = self.get_train(
@@ -2698,12 +3246,58 @@ class OperationsSessionsWidget(QWidget):
             "Passenger Consist"
         )
 
+    def clear_passenger_selection(
+        self,
+    ):
+
+        self.passenger_operator_sheet_button.setEnabled(
+            False
+        )
+
+        self.clear_passenger_train_summary()
+
+        self.clear_passenger_cars()
+
+        self.passenger_consist_widget.setVisible(
+            False
+        )
+
+        self.update_passenger_consist_read_only_state()
+
+    def update_passenger_consist_read_only_state(
+        self,
+    ):
+
+        operations_session = (
+            self.get_selected_session_without_message()
+        )
+
+        is_completed = (
+            operations_session is not None
+            and operations_session.status == "COMPLETED"
+        )
+
+        for button in (
+            self.add_passenger_car_button,
+            self.remove_passenger_car_button,
+            self.move_passenger_car_up_button,
+            self.move_passenger_car_down_button,
+        ):
+
+            button.setEnabled(
+                not is_completed
+            )
+
+        self.passenger_consist_status_label.setVisible(
+            is_completed
+        )
+
     def refresh_passenger_cars(
         self,
     ):
 
         assignment_id = (
-            self.get_selected_train_assignment_id_without_message()
+            self.get_selected_passenger_train_assignment_id_without_message()
         )
 
         if assignment_id is None:
@@ -2713,7 +3307,7 @@ class OperationsSessionsWidget(QWidget):
             return
 
         train_id = (
-            self.get_selected_train_id()
+            self.get_selected_passenger_train_id()
         )
 
         train = self.get_train(
@@ -2784,7 +3378,7 @@ class OperationsSessionsWidget(QWidget):
             return
 
         train_id = (
-            self.get_selected_train_id()
+            self.get_selected_passenger_train_id()
         )
 
         train = self.get_train(
@@ -2812,7 +3406,7 @@ class OperationsSessionsWidget(QWidget):
             return
 
         assignment_id = (
-            self.get_selected_train_assignment_id()
+            self.get_selected_passenger_train_assignment_id()
         )
 
         if assignment_id is None:
@@ -2970,7 +3564,7 @@ class OperationsSessionsWidget(QWidget):
             return
 
         assignment_id = (
-            self.get_selected_train_assignment_id()
+            self.get_selected_passenger_train_assignment_id()
         )
 
         if assignment_id is None:
@@ -3048,7 +3642,7 @@ class OperationsSessionsWidget(QWidget):
             return
 
         assignment_id = (
-            self.get_selected_train_assignment_id()
+            self.get_selected_passenger_train_assignment_id()
         )
 
         if assignment_id is None:
@@ -3126,7 +3720,7 @@ class OperationsSessionsWidget(QWidget):
             return
 
         assignment_id = (
-            self.get_selected_train_assignment_id()
+            self.get_selected_passenger_train_assignment_id()
         )
 
         if assignment_id is None:
@@ -3253,12 +3847,14 @@ class OperationsSessionsWidget(QWidget):
 
         self.update_train_table()
 
+        self.passenger_train_table_model_data = []
+
+        self.update_passenger_train_table()
+
         self.clear_route()
         self.clear_locomotives()
-        self.clear_passenger_cars()
-        self.passenger_consist_widget.setVisible(
-            False
-        )
+        self.clear_passenger_selection()
+
         self.clear_train_weight_summary()
 
     def load_waybills_for_session(
@@ -3552,6 +4148,20 @@ class OperationsSessionsWidget(QWidget):
                 ),
             )
 
+            return
+
+        can_delete, message = (
+            CarMoveService.can_delete_by_operations_session(
+                operations_session.id
+            )
+        )
+
+        if not can_delete:
+            QMessageBox.warning(
+                self,
+                "Delete Car Moves",
+                message,
+            )
             return
 
         answer = QMessageBox.question(

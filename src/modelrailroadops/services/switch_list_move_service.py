@@ -4,6 +4,7 @@ from modelrailroadops.database.database import SessionLocal
 
 from modelrailroadops.models.car import Car
 from modelrailroadops.models.car_move import CarMove
+from modelrailroadops.models.car_movement import CarMovement
 from modelrailroadops.models.location import Location
 from modelrailroadops.models.location_track import LocationTrack
 from modelrailroadops.models.operations_session import OperationsSession
@@ -685,20 +686,36 @@ class SwitchListMoveService:
     def _complete_pickup(
         car_move,
         waybill,
+        car,
         operations_session,
         session,
     ):
         """
         Complete one PICKUP instruction.
 
-        The car remains at its current physical database
-        location because the application does not yet model
-        an in-transit/train location.
+        The car is removed from its physical location and marked
+        as being aboard the Train assigned to this CarMove.
         """
 
         if operations_session.status == "PLANNED":
 
             operations_session.status = "ACTIVE"
+
+        success, message = (
+            CarLocationService.move_car_to_train_with_message(
+                car.id,
+                car_move.train_id,
+                operations_session.id,
+                db_session=session,
+            )
+        )
+
+        if not success:
+
+            return (
+                False,
+                message,
+            )
 
         success, result = (
             CarMoveService.complete(
@@ -881,7 +898,9 @@ class SwitchListMoveService:
             - Completes only the PICKUP instruction.
             - Starts a PLANNED Operations Session.
             - Changes an ACTIVE Waybill to IN_PROGRESS.
-            - Does not physically relocate the car.
+            - Removes the car from its physical location.
+            - Marks the car as being aboard the assigned Train.
+            - Records PICKUP movement history.
 
         SETOUT:
 
@@ -934,6 +953,7 @@ class SwitchListMoveService:
                     SwitchListMoveService._complete_pickup(
                         car_move,
                         waybill,
+                        car,
                         operations_session,
                         session,
                     )
@@ -977,4 +997,136 @@ class SwitchListMoveService:
 
         finally:
 
+            session.close()
+
+    # ==========================================================
+    # RETURN CAR TO PICKUP LOCATION
+    # ==========================================================
+
+    @staticmethod
+    def return_car_to_pickup(
+        setout_car_move_id,
+    ):
+        """Undo a completed pickup before its set-out."""
+
+        session = SessionLocal()
+
+        try:
+            (
+                valid,
+                result,
+                waybill,
+                car,
+                operations_session,
+            ) = SwitchListMoveService._validate_car_move(
+                setout_car_move_id,
+                session,
+            )
+
+            if not valid:
+                session.rollback()
+                return False, result
+
+            setout = result
+
+            if setout.move_type != "SETOUT":
+                session.rollback()
+                return False, "Select an onboard car's SETOUT instruction."
+
+            on_train_location = car.location or ""
+
+            if not on_train_location.startswith("On Train:"):
+                session.rollback()
+                return False, "This car is not currently aboard a train."
+
+            pickup = (
+                session.execute(
+                    select(CarMove)
+                    .where(
+                        CarMove.operations_session_id
+                        == setout.operations_session_id,
+                        CarMove.train_id == setout.train_id,
+                        CarMove.car_id == setout.car_id,
+                        CarMove.waybill_id == setout.waybill_id,
+                        CarMove.move_type == "PICKUP",
+                        CarMove.status == "COMPLETED",
+                    )
+                    .order_by(CarMove.id)
+                )
+                .scalars()
+                .first()
+            )
+
+            if pickup is None:
+                session.rollback()
+                return False, "The completed PICKUP instruction was not found."
+
+            if waybill.origin_spot_id is not None:
+                success, message = (
+                    CarLocationService.assign_car_to_spot_with_message(
+                        car.id,
+                        waybill.origin_spot_id,
+                        operations_session.id,
+                        db_session=session,
+                    )
+                )
+
+            elif waybill.origin_location_track_id is not None:
+                success, message = (
+                    CarLocationService.move_car_to_location_track_with_message(
+                        car.id,
+                        waybill.origin_location_track_id,
+                        operations_session.id,
+                        db_session=session,
+                    )
+                )
+
+            else:
+                success = False
+                message = "The Waybill does not have a returnable pickup location."
+
+            if not success:
+                session.rollback()
+                return False, message
+
+            for pending_object in session.new:
+                if isinstance(pending_object, CarMovement):
+                    pending_object.movement_type = "RETURN"
+                    pending_object.notes = (
+                        f"Returned from {on_train_location} "
+                        "to the pickup location."
+                    )
+
+            pickup.status = "PENDING"
+            pickup.completed_at = None
+            waybill.status = "ACTIVE"
+            waybill.completed_at = None
+
+            session.flush()
+
+            other_completed_move = (
+                session.execute(
+                    select(CarMove.id)
+                    .where(
+                        CarMove.operations_session_id
+                        == operations_session.id,
+                        CarMove.status == "COMPLETED",
+                    )
+                    .limit(1)
+                )
+                .scalar_one_or_none()
+            )
+
+            if other_completed_move is None:
+                operations_session.status = "PLANNED"
+
+            session.commit()
+
+            return True, "Car returned to its pickup location."
+
+        except Exception as exc:
+            session.rollback()
+            return False, str(exc)
+
+        finally:
             session.close()

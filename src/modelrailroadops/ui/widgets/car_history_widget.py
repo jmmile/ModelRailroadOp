@@ -226,3 +226,19 @@ class CarHistoryWidget(QWidget):
 
 
         self.table.resizeColumnsToContents()
+
+
+    def refresh(self):
+        """Reload cars and movement history when this tab is shown."""
+
+        selected_car_id = self.car_combo.currentData()
+
+        self.load_cars()
+
+        if selected_car_id is not None:
+            index = self.car_combo.findData(selected_car_id)
+
+            if index >= 0:
+                self.car_combo.setCurrentIndex(index)
+
+        self.apply_filter()

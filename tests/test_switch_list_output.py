@@ -603,6 +603,72 @@ def test_completed_waybill_is_removed_from_switch_list(
     assert rows == []
 
 
+def test_completed_session_retains_completed_switch_list(
+    test_database,
+):
+    record_ids = seed_switch_list(
+        test_database
+    )
+
+    with test_database.SessionLocal() as session:
+        operations_session = session.get(
+            OperationsSession,
+            record_ids["operations_session_id"],
+        )
+        waybill = session.get(
+            Waybill,
+            record_ids["waybill_id"],
+        )
+
+        operations_session.status = "COMPLETED"
+        waybill.status = "COMPLETED"
+        session.commit()
+
+    rows = SwitchListService.get_switch_list_rows(
+        record_ids["operations_session_id"]
+    )
+
+    assert len(rows) == 2
+    assert {
+        row["train_id"]
+        for row in rows
+    } == {
+        record_ids["train_id"],
+    }
+    assert {
+        row["waybill_status"]
+        for row in rows
+    } == {
+        "COMPLETED",
+    }
+
+
+def test_completed_session_excludes_cancelled_waybill(
+    test_database,
+):
+    record_ids = seed_switch_list(
+        test_database
+    )
+
+    with test_database.SessionLocal() as session:
+        operations_session = session.get(
+            OperationsSession,
+            record_ids["operations_session_id"],
+        )
+        waybill = session.get(
+            Waybill,
+            record_ids["waybill_id"],
+        )
+
+        operations_session.status = "COMPLETED"
+        waybill.status = "CANCELLED"
+        session.commit()
+
+    assert SwitchListService.get_switch_list_rows(
+        record_ids["operations_session_id"]
+    ) == []
+
+
 def test_setout_instruction_cannot_complete_before_pickup(
     test_database,
 ):
