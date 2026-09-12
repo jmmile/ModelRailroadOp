@@ -43,6 +43,37 @@ class LocationService:
     )
 
     @staticmethod
+    def set_industry_car_load_state(car_id, status):
+        """Explicitly mark a spotted industry car Loaded or Empty."""
+        normalized_status = str(status or "").strip().upper()
+        if normalized_status not in ("LOADED", "EMPTY"):
+            return False, "Car status must be Loaded or Empty."
+
+        with SessionLocal() as session:
+            car = session.get(Car, car_id)
+            if car is None:
+                return False, "Car not found."
+            if car.industry_id is None or car.spot_id is None:
+                return False, "The car is not spotted at an industry."
+
+            spot = session.get(Spot, car.spot_id)
+            if spot is None:
+                return False, "The car's industry spot could not be found."
+
+            original_status = car.status
+            car.status = normalized_status
+            valid, message = CarLocationService.validate_car_for_spot(
+                car,
+                spot,
+            )
+            if not valid:
+                car.status = original_status
+                return False, message
+
+            session.commit()
+            return True, f"Car marked {normalized_status.title()}."
+
+    @staticmethod
     def move_car_on_track(car_id, direction):
         """Move a car one position left or right on its current track."""
 

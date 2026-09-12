@@ -7,6 +7,7 @@ from modelrailroadops.models.industry import Industry
 from modelrailroadops.models.industry_track import IndustryTrack
 from modelrailroadops.models.spot import Spot
 from modelrailroadops.services.car_location_service import CarLocationService
+from modelrailroadops.services.location_service import LocationService
 from modelrailroadops.ui.widgets.track_diagram_widget import (
     EmptySpotWidget,
     TrackDiagramWidget,
@@ -83,6 +84,10 @@ def test_track_diagram_centers_car_type_beneath_identifier(
     assert widget.status_label.text().startswith("1 tracks | 2 cars")
 
     first, second = widget.car_symbols
+    widget.find_car_edit.setText("2266")
+    widget.find_car()
+    assert widget.selected_car_id == second.car.id
+    assert "Car: TXC 2266" in widget.details_label.text()
     assert first.number_label.text() == "GN 33103"
     assert first.type_label.text() == "Gondola"
     assert second.number_label.text() == "TXC 2266"
@@ -109,6 +114,8 @@ def test_track_diagram_centers_car_type_beneath_identifier(
     assert widget.car_symbols[1].number_label.text() == "GN 33103"
     assert not widget.move_left_button.isEnabled()
     assert widget.move_right_button.isEnabled()
+    assert not widget.mark_loaded_button.isEnabled()
+    assert not widget.mark_empty_button.isEnabled()
 
     with test_database.SessionLocal() as session:
         reordered_car = session.get(Car, second.car.id)
@@ -207,6 +214,7 @@ def test_track_diagram_groups_industry_tracks_by_town(
         second_spot = Spot(track_id=industry_track.id, spot_number=2)
         session.add_all((first_spot, second_spot))
         session.flush()
+        first_spot_id = first_spot.id
         session.add(Car(
             reporting_mark="GN",
             number="33103",
@@ -250,11 +258,30 @@ def test_track_diagram_groups_industry_tracks_by_town(
     assert widget.car_symbols[0].number_label.text() == "GN 33103"
     assert widget.status_label.text().startswith("1 tracks | 1 cars")
     assert len(widget.track_sections[0].findChildren(EmptySpotWidget)) == 1
+    empty_spot_widget = widget.empty_spot_widgets[0]
+    empty_spot_widget.clicked.emit(empty_spot_widget.spot)
+    assert "Empty Spot: Acme Transfer Company" in widget.details_label.text()
+    assert "Requirements: Any car" in widget.details_label.text()
+    assert widget.find_matching_car_button.isEnabled()
+    assert not widget.move_left_button.isEnabled()
 
     widget.car_symbols[0].clicked.emit(widget.car_symbols[0].car)
     assert "Track Position: Spot 1" in widget.details_label.text()
     assert not widget.move_left_button.isEnabled()
     assert widget.move_right_button.isEnabled()
+    assert widget.mark_loaded_button.isEnabled()
+    assert not widget.mark_empty_button.isEnabled()
+    assert not widget.find_matching_car_button.isEnabled()
+
+    widget.set_selected_car_load_state("LOADED")
+    assert "Status: LOADED" in widget.details_label.text()
+    assert not widget.mark_loaded_button.isEnabled()
+    assert widget.mark_empty_button.isEnabled()
+    assert widget.car_symbols[0].fill_color == "#d8c39e"
+
+    widget.set_selected_car_load_state("EMPTY")
+    assert "Status: EMPTY" in widget.details_label.text()
+    assert widget.car_symbols[0].fill_color == "#e7f0f7"
 
     widget.move_selected_car(1)
     assert "Track Position: Spot 2" in widget.details_label.text()
@@ -272,5 +299,15 @@ def test_track_diagram_groups_industry_tracks_by_town(
         dragged_car = session.query(Car).filter_by(number="33103").one()
         dragged_spot = session.get(Spot, dragged_car.spot_id)
         assert dragged_spot.spot_number == 1
+        session.get(Spot, first_spot_id).empty_only = True
+        session.commit()
+        dragged_car_id = dragged_car.id
+
+    success, message = LocationService.set_industry_car_load_state(
+        dragged_car_id,
+        "LOADED",
+    )
+    assert not success
+    assert "requires an empty car" in message
 
     widget.close()

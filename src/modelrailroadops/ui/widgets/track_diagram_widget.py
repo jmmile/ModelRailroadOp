@@ -5,6 +5,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPushButton,
     QMessageBox,
     QScrollArea,
@@ -15,6 +16,12 @@ from PySide6.QtWidgets import (
 
 from modelrailroadops.services.location_service import LocationService
 from modelrailroadops.services.industry_service import IndustryService
+from modelrailroadops.services.industry_demand_service import (
+    IndustryDemandService,
+)
+from modelrailroadops.ui.industries.industry_demand_dialog import (
+    IndustryDemandDialog,
+)
 
 
 class CarSymbolWidget(QFrame):
@@ -114,19 +121,34 @@ class CarSymbolWidget(QFrame):
 class EmptySpotWidget(QFrame):
     """Visible destination for an unoccupied industry spot."""
 
-    def __init__(self, spot_number, parent=None):
+    clicked = Signal(object)
+
+    def __init__(self, spot, parent=None):
         super().__init__(parent)
+        self.spot = spot
         self.setFixedWidth(CarSymbolWidget.SYMBOL_WIDTH)
         self.setMinimumHeight(58)
-        self.setStyleSheet(
-            "QFrame { border: 1px dashed #888; background-color: #f7f7f7; }"
-            "QLabel { border: none; color: #666; }"
-        )
+        self.setCursor(Qt.PointingHandCursor)
+        self.set_selected(False)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(3, 3, 3, 3)
-        label = QLabel(f"Spot {spot_number}\nEmpty")
+        label = QLabel(f"Spot {spot.spot_number}\nEmpty")
         label.setAlignment(Qt.AlignCenter)
         layout.addWidget(label)
+
+    def set_selected(self, selected):
+        border_color = "#1b5eaa" if selected else "#888"
+        border_width = "2px" if selected else "1px"
+        self.setStyleSheet(
+            f"QFrame {{ border: {border_width} dashed {border_color}; "
+            "background-color: #f7f7f7; }"
+            "QLabel { border: none; color: #666; }"
+        )
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.clicked.emit(self.spot)
+        super().mousePressEvent(event)
 
 
 class TrackCarRowWidget(QWidget):
@@ -239,10 +261,12 @@ class TrackDiagramWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.car_symbols = []
+        self.empty_spot_widgets = []
         self.track_sections = []
         self.track_headings = []
         self.diagram_tab_layouts = {}
         self.selected_car_id = None
+        self.selected_spot_id = None
         self._diagram_signature = None
 
         layout = QVBoxLayout(self)
@@ -259,6 +283,14 @@ class TrackDiagramWidget(QWidget):
         )
         controls.addWidget(self.status_label)
         controls.addStretch()
+
+        controls.addWidget(QLabel("Find Car"))
+        self.find_car_edit = QLineEdit()
+        self.find_car_edit.setPlaceholderText("Reporting marks or number")
+        self.find_car_edit.setMaximumWidth(190)
+        controls.addWidget(self.find_car_edit)
+        self.find_car_button = QPushButton("Find")
+        controls.addWidget(self.find_car_button)
 
         self.refresh_button = QPushButton("Refresh")
         controls.addWidget(self.refresh_button)
@@ -289,21 +321,41 @@ class TrackDiagramWidget(QWidget):
         detail_layout.addWidget(self.details_label, 1)
         self.move_left_button = QPushButton("Move Left")
         self.move_right_button = QPushButton("Move Right")
+        self.mark_loaded_button = QPushButton("Mark Loaded")
+        self.mark_empty_button = QPushButton("Mark Unloaded")
+        self.find_matching_car_button = QPushButton("Find Matching Car")
         self.move_left_button.setEnabled(False)
         self.move_right_button.setEnabled(False)
+        self.mark_loaded_button.setEnabled(False)
+        self.mark_empty_button.setEnabled(False)
+        self.find_matching_car_button.setEnabled(False)
         detail_layout.addWidget(self.move_left_button)
         detail_layout.addWidget(self.move_right_button)
+        detail_layout.addWidget(self.mark_loaded_button)
+        detail_layout.addWidget(self.mark_empty_button)
+        detail_layout.addWidget(self.find_matching_car_button)
         layout.addLayout(detail_layout)
 
         self.diagram_tabs = QTabWidget()
         layout.addWidget(self.diagram_tabs)
 
         self.refresh_button.clicked.connect(self.refresh)
+        self.find_car_button.clicked.connect(self.find_car)
+        self.find_car_edit.returnPressed.connect(self.find_car)
         self.move_left_button.clicked.connect(
             lambda: self.move_selected_car(-1)
         )
         self.move_right_button.clicked.connect(
             lambda: self.move_selected_car(1)
+        )
+        self.mark_loaded_button.clicked.connect(
+            lambda: self.set_selected_car_load_state("LOADED")
+        )
+        self.mark_empty_button.clicked.connect(
+            lambda: self.set_selected_car_load_state("EMPTY")
+        )
+        self.find_matching_car_button.clicked.connect(
+            self.find_matching_car
         )
 
         self.refresh_timer = QTimer(self)
@@ -348,7 +400,10 @@ class TrackDiagramWidget(QWidget):
                 cars = []
                 spot_cells = []
                 for spot in track.spots:
-                    spot_cells.append((spot.spot_number, spot.car))
+                    spot.diagram_industry_name = industry.name
+                    spot.diagram_track_name = track.name
+                    spot.diagram_town = town
+                    spot_cells.append((spot, spot.car))
                     if spot.car is None:
                         continue
                     spot.car.diagram_spot_number = spot.spot_number
@@ -438,6 +493,7 @@ class TrackDiagramWidget(QWidget):
             self.diagram_tabs.removeTab(0)
             page.deleteLater()
         self.car_symbols = []
+        self.empty_spot_widgets = []
         self.track_sections = []
         self.track_headings = []
         self.diagram_tab_layouts = {}
@@ -469,6 +525,7 @@ class TrackDiagramWidget(QWidget):
         capacity=None,
         row_track_id=None,
         target_layout=None,
+        tab_name=None,
     ):
         section = QFrame()
         section.setFrameShape(QFrame.StyledPanel)
@@ -529,9 +586,13 @@ class TrackDiagramWidget(QWidget):
         row_items = []
         spot_cells = getattr(track, "diagram_spot_cells", None)
         if spot_cells is not None:
-            for spot_number, car in spot_cells:
+            for spot, car in spot_cells:
                 if car is None:
-                    placeholder = EmptySpotWidget(spot_number)
+                    placeholder = EmptySpotWidget(spot)
+                    placeholder.clicked.connect(self.show_spot_details)
+                    if spot.id == self.selected_spot_id:
+                        placeholder.set_selected(True)
+                    self.empty_spot_widgets.append(placeholder)
                     row_items.append(placeholder)
                     car_layout.addWidget(placeholder)
                     continue
@@ -540,6 +601,7 @@ class TrackDiagramWidget(QWidget):
                 if car.id == self.selected_car_id:
                     symbol.set_selected(True)
                 self.car_symbols.append(symbol)
+                symbol.diagram_tab_name = tab_name
                 track_symbols.append(symbol)
                 row_items.append(symbol)
                 car_layout.addWidget(symbol)
@@ -550,6 +612,7 @@ class TrackDiagramWidget(QWidget):
                 if car.id == self.selected_car_id:
                     symbol.set_selected(True)
                 self.car_symbols.append(symbol)
+                symbol.diagram_tab_name = tab_name
                 track_symbols.append(symbol)
                 row_items.append(symbol)
                 car_layout.addWidget(symbol)
@@ -572,8 +635,11 @@ class TrackDiagramWidget(QWidget):
 
     def show_car_details(self, car):
         self.selected_car_id = car.id
+        self.selected_spot_id = None
         for symbol in self.car_symbols:
             symbol.set_selected(symbol.car.id == car.id)
+        for spot_widget in self.empty_spot_widgets:
+            spot_widget.set_selected(False)
 
         length = (
             f"{car.length} ft"
@@ -590,6 +656,133 @@ class TrackDiagramWidget(QWidget):
             f"{self._track_position_text(car)}"
         )
         self._update_move_buttons(car)
+        is_industry_car = car.industry_id is not None and car.spot_id is not None
+        self.mark_loaded_button.setEnabled(
+            is_industry_car and (car.status or "").upper() != "LOADED"
+        )
+        self.mark_empty_button.setEnabled(
+            is_industry_car and (car.status or "").upper() != "EMPTY"
+        )
+        self.find_matching_car_button.setEnabled(False)
+
+    def show_spot_details(self, spot):
+        self.selected_car_id = None
+        self.selected_spot_id = spot.id
+        for symbol in self.car_symbols:
+            symbol.set_selected(False)
+        for spot_widget in self.empty_spot_widgets:
+            spot_widget.set_selected(spot_widget.spot.id == spot.id)
+
+        requirements = []
+        if spot.allowed_car_type:
+            requirements.append(f"Car Type: {spot.allowed_car_type}")
+        if spot.allowed_owner:
+            requirements.append(f"Owner: {spot.allowed_owner}")
+        if spot.max_length is not None:
+            requirements.append(f"Maximum Length: {spot.max_length} ft")
+        if spot.load_only:
+            requirements.append("Loaded only")
+        if spot.empty_only:
+            requirements.append("Empty only")
+        if not spot.hazardous_allowed:
+            requirements.append("No hazardous cars")
+
+        self.details_label.setText(
+            f"Empty Spot: {spot.diagram_industry_name} — "
+            f"{spot.diagram_track_name} — Spot {spot.spot_number}  |  "
+            f"Town: {spot.diagram_town}  |  "
+            f"Requirements: {', '.join(requirements) or 'Any car'}"
+        )
+        self.move_left_button.setEnabled(False)
+        self.move_right_button.setEnabled(False)
+        self.mark_loaded_button.setEnabled(False)
+        self.mark_empty_button.setEnabled(False)
+        self.find_matching_car_button.setEnabled(True)
+
+    def find_matching_car(self):
+        if self.selected_spot_id is None:
+            return
+        demand = next(
+            (
+                row for row in IndustryDemandService.get_open_demands()
+                if row["spot_id"] == self.selected_spot_id
+            ),
+            None,
+        )
+        if demand is None:
+            QMessageBox.information(
+                self,
+                "Find Matching Car",
+                "This spot is occupied or already reserved by a waybill.",
+            )
+            self.refresh(force=True)
+            return
+        dialog = IndustryDemandDialog(
+            self,
+            selected_spot_id=self.selected_spot_id,
+        )
+        dialog.exec()
+        self.refresh(force=True)
+
+    def set_selected_car_load_state(self, status):
+        if self.selected_car_id is None:
+            return
+
+        success, message = LocationService.set_industry_car_load_state(
+            self.selected_car_id,
+            status,
+        )
+        if not success:
+            QMessageBox.warning(self, "Industry Work", message)
+            return
+
+        selected_car_id = self.selected_car_id
+        self.refresh(force=True)
+        selected_symbol = next(
+            (
+                symbol for symbol in self.car_symbols
+                if symbol.car.id == selected_car_id
+            ),
+            None,
+        )
+        if selected_symbol is not None:
+            self.show_car_details(selected_symbol.car)
+
+    def find_car(self):
+        search_text = " ".join(self.find_car_edit.text().split()).casefold()
+        if not search_text:
+            QMessageBox.information(
+                self,
+                "Find Car",
+                "Enter reporting marks or a car number.",
+            )
+            return
+
+        symbol = next(
+            (
+                item for item in self.car_symbols
+                if search_text in (
+                    f"{item.car.reporting_mark} {item.car.number}"
+                ).casefold()
+            ),
+            None,
+        )
+        if symbol is None:
+            QMessageBox.information(
+                self,
+                "Find Car",
+                f"No car matching '{self.find_car_edit.text().strip()}' is on a displayed track.",
+            )
+            return
+
+        tab_name = getattr(symbol, "diagram_tab_name", None)
+        for index in range(self.diagram_tabs.count()):
+            if self.diagram_tabs.tabText(index) == tab_name:
+                self.diagram_tabs.setCurrentIndex(index)
+                scroll_area = self.diagram_tabs.widget(index)
+                scroll_area.ensureWidgetVisible(symbol)
+                break
+        self.show_car_details(symbol.car)
 
     @staticmethod
     def _track_position_text(car):
@@ -701,6 +894,7 @@ class TrackDiagramWidget(QWidget):
                     track,
                     cars,
                     target_layout=general_layout,
+                    tab_name="General Tracks",
                 )
                 track_count += 1
                 car_count += len(cars)
@@ -723,6 +917,7 @@ class TrackDiagramWidget(QWidget):
                         capacity=capacity,
                         row_track_id=track.operating_track_id,
                         target_layout=town_layout,
+                        tab_name=town,
                     )
                     track_count += 1
                     car_count += len(cars)
@@ -754,6 +949,9 @@ class TrackDiagramWidget(QWidget):
             )
             self.move_left_button.setEnabled(False)
             self.move_right_button.setEnabled(False)
+            self.mark_loaded_button.setEnabled(False)
+            self.mark_empty_button.setEnabled(False)
+            self.find_matching_car_button.setEnabled(False)
 
     def showEvent(self, event):
         super().showEvent(event)

@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QPushButton,
     QHBoxLayout,
+    QLabel,
     QMessageBox,
 )
 
@@ -15,7 +16,10 @@ from sqlalchemy import select
 from modelrailroadops.database.database import SessionLocal
 from modelrailroadops.models.industry import Industry
 from modelrailroadops.models.industry_track import IndustryTrack
+from modelrailroadops.models.location import Location
+from modelrailroadops.models.location_track import LocationTrack
 from modelrailroadops.models.spot import Spot
+from modelrailroadops.services.car_location_service import CarLocationService
 from modelrailroadops.services.car_service import CarService
 
 
@@ -143,6 +147,14 @@ class AddCarDialog(QDialog):
         # Operating location
         #
 
+        self.assignment_type = QComboBox()
+        self.assignment_type.addItem("Unassigned", "UNASSIGNED")
+        self.assignment_type.addItem("General Railroad Track", "GENERAL")
+        self.assignment_type.addItem("Industry Spot", "INDUSTRY")
+
+        self.general_location = QComboBox()
+        self.general_track = QComboBox()
+
         self.industry = QComboBox()
 
         self.track = QComboBox()
@@ -208,18 +220,29 @@ class AddCarDialog(QDialog):
             self.status
         )
 
+        form.addRow("Assignment Type", self.assignment_type)
+
+        self.general_location_label = QLabel("General Location")
+        form.addRow(self.general_location_label, self.general_location)
+
+        self.general_track_label = QLabel("General Track")
+        form.addRow(self.general_track_label, self.general_track)
+
+        self.industry_label = QLabel("Industry")
         form.addRow(
-            "Current Location",
+            self.industry_label,
             self.industry
         )
 
+        self.industry_track_label = QLabel("Industry Track")
         form.addRow(
-            "Track",
+            self.industry_track_label,
             self.track
         )
 
+        self.spot_label = QLabel("Spot")
         form.addRow(
-            "Spot",
+            self.spot_label,
             self.spot
         )
 
@@ -260,6 +283,7 @@ class AddCarDialog(QDialog):
         #
 
         self.load_industries()
+        self.load_general_locations()
 
         #
         # Signals
@@ -271,6 +295,14 @@ class AddCarDialog(QDialog):
 
         self.track.currentIndexChanged.connect(
             self.track_changed
+        )
+
+        self.assignment_type.currentIndexChanged.connect(
+            self.assignment_type_changed
+        )
+
+        self.general_location.currentIndexChanged.connect(
+            self.load_general_tracks
         )
 
         self.cancel_button.clicked.connect(
@@ -335,9 +367,96 @@ class AddCarDialog(QDialog):
 
             if self.car.industry_id:
 
+                self.assignment_type.setCurrentIndex(
+                    self.assignment_type.findData("INDUSTRY")
+                )
+
                 self.select_industry(
                     self.car.industry_id
                 )
+
+            elif self.car.operating_track_id is not None:
+
+                self.assignment_type.setCurrentIndex(
+                    self.assignment_type.findData("GENERAL")
+                )
+                self.select_general_location(
+                    self.car.operating_location_id,
+                    self.car.operating_track_id,
+                )
+
+        self.assignment_type_changed()
+
+    def assignment_type_changed(self, _index=None):
+        mode = self.assignment_type.currentData()
+        general = mode == "GENERAL"
+        industry = mode == "INDUSTRY"
+        for widget in (
+            self.general_location_label,
+            self.general_location,
+            self.general_track_label,
+            self.general_track,
+        ):
+            widget.setVisible(general)
+        for widget in (
+            self.industry_label,
+            self.industry,
+            self.industry_track_label,
+            self.track,
+            self.spot_label,
+            self.spot,
+        ):
+            widget.setVisible(industry)
+
+    def load_general_locations(self):
+        self.general_location.blockSignals(True)
+        self.general_location.clear()
+        self.general_location.addItem("Select a location", None)
+        with SessionLocal() as session:
+            locations = session.execute(
+                select(Location)
+                .where(
+                    Location.active.is_(True),
+                    Location.location_type.in_((
+                        "YARD", "STAGING", "INTERCHANGE"
+                    )),
+                )
+                .order_by(Location.name)
+            ).scalars().all()
+            for location in locations:
+                self.general_location.addItem(
+                    f"{location.name} — {location.location_type.title()}",
+                    location.id,
+                )
+        self.general_location.blockSignals(False)
+        self.load_general_tracks()
+
+    def load_general_tracks(self, _index=None, selected_track_id=None):
+        location_id = self.general_location.currentData()
+        self.general_track.clear()
+        self.general_track.addItem("Select a track", None)
+        if location_id is not None:
+            with SessionLocal() as session:
+                tracks = session.execute(
+                    select(LocationTrack)
+                    .where(
+                        LocationTrack.location_id == location_id,
+                        LocationTrack.active.is_(True),
+                    )
+                    .order_by(LocationTrack.name)
+                ).scalars().all()
+                for track in tracks:
+                    self.general_track.addItem(track.name, track.id)
+        if selected_track_id is not None:
+            index = self.general_track.findData(selected_track_id)
+            if index >= 0:
+                self.general_track.setCurrentIndex(index)
+
+    def select_general_location(self, location_id, track_id):
+        index = self.general_location.findData(location_id)
+        if index >= 0:
+            self.general_location.setCurrentIndex(index)
+            self.load_general_tracks(selected_track_id=track_id)
 
     #
     # Industry loading
@@ -740,17 +859,47 @@ class AddCarDialog(QDialog):
             self.status.currentText()
         )
 
+        assignment_mode = self.assignment_type.currentData()
+
+        general_track_id = (
+            self.general_track.currentData()
+            if assignment_mode == "GENERAL"
+            else None
+        )
+
         industry_id = (
             self.industry.currentData()
+            if assignment_mode == "INDUSTRY"
+            else None
         )
 
         track_id = (
             self.track.currentData()
+            if assignment_mode == "INDUSTRY"
+            else None
         )
 
         spot_id = (
             self.spot.currentData()
+            if assignment_mode == "INDUSTRY"
+            else None
         )
+
+        if assignment_mode == "GENERAL" and general_track_id is None:
+            QMessageBox.warning(
+                self,
+                "Invalid Location",
+                "Please select a general railroad location and track.",
+            )
+            return
+
+        if assignment_mode == "INDUSTRY" and spot_id is None:
+            QMessageBox.warning(
+                self,
+                "Invalid Location",
+                "Please select an industry, track, and spot.",
+            )
+            return
 
         #
         # A spot can only be selected when
@@ -821,20 +970,26 @@ class AddCarDialog(QDialog):
 
             try:
 
-                if spot_id is not None:
+                if assignment_mode == "GENERAL":
+
+                    success, message = (
+                        CarLocationService
+                        .move_car_to_location_track_with_message(
+                            self.car.id,
+                            general_track_id,
+                        )
+                    )
+                    if not success:
+                        raise ValueError(message)
+
+                elif assignment_mode == "INDUSTRY":
 
                     CarService.assign_to_spot(
                         self.car.id,
                         spot_id
                     )
 
-                elif self.car.industry_id is not None:
-
-                    CarService.clear_spot_assignment(
-                        self.car.id
-                    )
-
-                elif self.car.operating_track_id is None:
+                else:
 
                     CarService.clear_spot_assignment(
                         self.car.id
@@ -897,14 +1052,25 @@ class AddCarDialog(QDialog):
             # selected spot.
             #
 
-            if spot_id is not None:
+            if assignment_mode in ("GENERAL", "INDUSTRY"):
 
                 try:
 
-                    CarService.assign_to_spot(
-                        car.id,
-                        spot_id
-                    )
+                    if assignment_mode == "GENERAL":
+                        success, message = (
+                            CarLocationService
+                            .move_car_to_location_track_with_message(
+                                car.id,
+                                general_track_id,
+                            )
+                        )
+                        if not success:
+                            raise ValueError(message)
+                    else:
+                        CarService.assign_to_spot(
+                            car.id,
+                            spot_id
+                        )
 
                 except ValueError as ex:
 

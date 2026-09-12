@@ -24,6 +24,9 @@ from modelrailroadops.ui.industries.industry_table_model import (
 from modelrailroadops.ui.dialogs.add_industry_dialog import (
     AddIndustryDialog,
 )
+from modelrailroadops.ui.industries.industry_demand_dialog import (
+    IndustryDemandDialog,
+)
 
 from modelrailroadops.services.industry_service import (
     IndustryService,
@@ -105,6 +108,10 @@ class IndustryTab(QWidget):
             "Delete Industry"
         )
 
+        self.demand_button = QPushButton(
+            "Industry Demand"
+        )
+
         button_layout.addWidget(
             self.add_button
         )
@@ -115,6 +122,10 @@ class IndustryTab(QWidget):
 
         button_layout.addWidget(
             self.delete_button
+        )
+
+        button_layout.addWidget(
+            self.demand_button
         )
 
         button_layout.addStretch()
@@ -213,6 +224,10 @@ class IndustryTab(QWidget):
 
         self.delete_button.clicked.connect(
             self.delete_industry
+        )
+
+        self.demand_button.clicked.connect(
+            self.show_industry_demand
         )
 
         self.table.doubleClicked.connect(
@@ -519,3 +534,6 @@ class IndustryTab(QWidget):
                 )
 
                 self.update_button_state()
+
+    def show_industry_demand(self):
+        IndustryDemandDialog(self).exec()

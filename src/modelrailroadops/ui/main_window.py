@@ -171,7 +171,7 @@ class MainWindow(QMainWindow):
 
         self.tabs.addTab(
             self.track_diagram_widget,
-            "Track Diagram",
+            "Car Spotting",
         )
 
         #

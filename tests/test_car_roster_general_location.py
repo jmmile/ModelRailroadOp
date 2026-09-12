@@ -72,3 +72,63 @@ def test_roster_status_edit_preserves_general_track_location(
         assert saved_car.operating_track_position == 1
 
     dialog.close()
+
+
+def test_roster_can_add_car_directly_to_general_track(
+    qapp,
+    test_database,
+    monkeypatch,
+):
+    with test_database.SessionLocal() as session:
+        location = Location(
+            name="BNSF Interchange",
+            location_type="INTERCHANGE",
+            active=True,
+        )
+        session.add(location)
+        session.flush()
+        track = LocationTrack(
+            location_id=location.id,
+            name="Interchange",
+            track_type="INTERCHANGE",
+            traffic_use="BOTH",
+            capacity=4,
+            active=True,
+        )
+        session.add(track)
+        session.commit()
+        location_id = location.id
+        track_id = track.id
+
+    monkeypatch.setattr(
+        "modelrailroadops.ui.dialogs.add_car_dialog.SessionLocal",
+        test_database.SessionLocal,
+    )
+    monkeypatch.setattr(
+        "modelrailroadops.services.car_service.SessionLocal",
+        test_database.SessionLocal,
+    )
+
+    dialog = AddCarDialog()
+    dialog.reporting_mark.setText("BN")
+    dialog.number.setText("586135")
+    dialog.owner.setText("BNSF")
+    dialog.car_type.setCurrentText("Hopper Car (wood chips)")
+    dialog.status.setCurrentText("Empty")
+    dialog.assignment_type.setCurrentIndex(
+        dialog.assignment_type.findData("GENERAL")
+    )
+    dialog.select_general_location(location_id, track_id)
+    dialog.save()
+
+    assert dialog.result() == AddCarDialog.Accepted
+    with test_database.SessionLocal() as session:
+        car = session.query(Car).filter_by(number="586135").one()
+        assert car.operating_location_id == location_id
+        assert car.operating_track_id == track_id
+        assert car.operating_track_position == 1
+        assert car.location == "BNSF Interchange - Interchange"
+        assert car.industry_id is None
+        assert car.spot_id is None
+
+    dialog.close()

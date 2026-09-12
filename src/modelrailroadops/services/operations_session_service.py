@@ -1,13 +1,19 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import joinedload
 
 from modelrailroadops.database.database import SessionLocal
 from modelrailroadops.models.car import Car
 from modelrailroadops.models.car_move import CarMove
+from modelrailroadops.models.industry_track import IndustryTrack
+from modelrailroadops.models.location_track import LocationTrack
 from modelrailroadops.models.operations_session import OperationsSession
+from modelrailroadops.models.operations_session_train import OperationsSessionTrain
+from modelrailroadops.models.spot import Spot
+from modelrailroadops.models.train_route import TrainRoute
 from modelrailroadops.models.waybill import Waybill
+from modelrailroadops.services.car_location_service import CarLocationService
 from modelrailroadops.services.waybill_service import WaybillService
 
 
@@ -34,6 +40,232 @@ class OperationsSessionService:
                 OperationsSession,
                 session_id,
             )
+
+    @staticmethod
+    def validate_pre_session(session_id):
+        """Return a read-only readiness report for an Operations Session."""
+        report = {
+            "session_name": "",
+            "errors": [],
+            "warnings": [],
+            "passed": [],
+        }
+        if session_id is None:
+            report["errors"].append("No Operations Session was specified.")
+            return False, report
+
+        with SessionLocal() as session:
+            operations_session = session.get(OperationsSession, session_id)
+            if operations_session is None:
+                report["errors"].append(
+                    f"Operations Session {session_id} was not found."
+                )
+                return False, report
+
+            report["session_name"] = operations_session.name
+            if operations_session.status != "PLANNED":
+                report["warnings"].append(
+                    f"Session status is {operations_session.status}, not PLANNED."
+                )
+
+            assignments = session.execute(
+                select(OperationsSessionTrain).where(
+                    OperationsSessionTrain.operations_session_id == session_id
+                )
+            ).scalars().all()
+            assigned_train_ids = {
+                assignment.train_id for assignment in assignments
+            }
+            if not assignments:
+                report["errors"].append("No trains are assigned to this session.")
+            else:
+                report["passed"].append(
+                    f"{len(assignments)} train assignment(s) found."
+                )
+
+            for assignment in assignments:
+                train = assignment.train
+                train_name = train.symbol or train.name
+                routes = session.execute(
+                    select(TrainRoute)
+                    .where(TrainRoute.train_id == train.id)
+                    .order_by(TrainRoute.sequence)
+                ).scalars().all()
+                if len(routes) < 2:
+                    report["errors"].append(
+                        f"Train {train_name} needs at least two route stops."
+                    )
+                elif len({route.sequence for route in routes}) != len(routes):
+                    report["errors"].append(
+                        f"Train {train_name} has duplicate route sequence numbers."
+                    )
+                else:
+                    report["passed"].append(
+                        f"Train {train_name} has {len(routes)} ordered route stops."
+                    )
+                if not assignment.locomotives:
+                    report["warnings"].append(
+                        f"Train {train_name} has no locomotive assigned."
+                    )
+
+            waybills = session.execute(
+                select(Waybill).where(
+                    Waybill.operations_session_id == session_id,
+                    Waybill.archived.is_(False),
+                )
+            ).scalars().all()
+            if not waybills:
+                report["warnings"].append(
+                    "No non-archived waybills are assigned to this session."
+                )
+            else:
+                report["passed"].append(
+                    f"{len(waybills)} non-archived waybill(s) found."
+                )
+
+            moves = session.execute(
+                select(CarMove).where(CarMove.operations_session_id == session_id)
+            ).scalars().all()
+            moves_by_waybill = {move.waybill_id for move in moves}
+            if waybills and not moves:
+                report["warnings"].append(
+                    "Car moves have not been generated for this session."
+                )
+
+            for move in moves:
+                if move.train_id not in assigned_train_ids:
+                    report["errors"].append(
+                        f"Car move #{move.id} uses a train not assigned to the session."
+                    )
+                if move.route_sequence is None:
+                    report["errors"].append(
+                        f"Car move #{move.id} has no route stop sequence."
+                    )
+
+            for waybill in waybills:
+                car = waybill.car
+                car_name = (
+                    f"{car.reporting_mark} {car.number}"
+                    if car is not None
+                    else f"car #{waybill.car_id}"
+                )
+                if car is None:
+                    report["errors"].append(
+                        f"Waybill #{waybill.id} references a missing car."
+                    )
+                    continue
+
+                has_industry_location = all((
+                    car.industry_id,
+                    car.track_id,
+                    car.spot_id,
+                ))
+                has_general_location = all((
+                    car.operating_location_id,
+                    car.operating_track_id,
+                ))
+                if not has_industry_location and not has_general_location:
+                    report["errors"].append(
+                        f"{car_name} has no complete current location."
+                    )
+
+                destination_is_industry = any((
+                    waybill.destination_industry_id,
+                    waybill.destination_track_id,
+                    waybill.destination_spot_id,
+                ))
+                destination_is_general = any((
+                    waybill.destination_location_id,
+                    waybill.destination_location_track_id,
+                ))
+                if not destination_is_industry and not destination_is_general:
+                    report["errors"].append(
+                        f"Waybill #{waybill.id} for {car_name} has no destination."
+                    )
+                elif destination_is_industry:
+                    if not all((
+                        waybill.destination_industry_id,
+                        waybill.destination_track_id,
+                        waybill.destination_spot_id,
+                    )):
+                        report["errors"].append(
+                            f"Waybill #{waybill.id} for {car_name} has an incomplete industry destination."
+                        )
+                    else:
+                        track = session.get(
+                            IndustryTrack,
+                            waybill.destination_track_id,
+                        )
+                        spot = session.get(Spot, waybill.destination_spot_id)
+                        if (
+                            track is None
+                            or track.industry_id != waybill.destination_industry_id
+                            or spot is None
+                            or spot.track_id != waybill.destination_track_id
+                        ):
+                            report["errors"].append(
+                                f"Waybill #{waybill.id} for {car_name} has mismatched destination records."
+                            )
+                        else:
+                            valid, message = (
+                                CarLocationService.validate_car_for_spot(
+                                    car,
+                                    spot,
+                                )
+                            )
+                            if not valid:
+                                report["errors"].append(
+                                    f"Waybill #{waybill.id} for {car_name}: {message.replace(chr(10), ' ')}"
+                                )
+                else:
+                    if not all((
+                        waybill.destination_location_id,
+                        waybill.destination_location_track_id,
+                    )):
+                        report["errors"].append(
+                            f"Waybill #{waybill.id} for {car_name} has an incomplete general-track destination."
+                        )
+                    else:
+                        track = session.get(
+                            LocationTrack,
+                            waybill.destination_location_track_id,
+                        )
+                        if (
+                            track is None
+                            or track.location_id != waybill.destination_location_id
+                        ):
+                            report["errors"].append(
+                                f"Waybill #{waybill.id} for {car_name} has a mismatched general-track destination."
+                            )
+
+                if moves and waybill.id not in moves_by_waybill:
+                    report["warnings"].append(
+                        f"Waybill #{waybill.id} for {car_name} has no generated car moves."
+                    )
+
+            general_tracks = session.execute(
+                select(LocationTrack).where(
+                    LocationTrack.active.is_(True),
+                    LocationTrack.capacity.is_not(None),
+                )
+            ).scalars().all()
+            for track in general_tracks:
+                occupied = session.scalar(
+                    select(func.count(Car.id)).where(
+                        Car.operating_track_id == track.id,
+                        Car.industry_id.is_(None),
+                    )
+                )
+                if occupied > track.capacity:
+                    report["errors"].append(
+                        f"Track {track.location.name} — {track.name} is over capacity "
+                        f"({occupied}/{track.capacity})."
+                    )
+
+            if not report["errors"]:
+                report["passed"].append("No blocking readiness errors found.")
+
+            return not report["errors"], report
 
     @staticmethod
     def create(

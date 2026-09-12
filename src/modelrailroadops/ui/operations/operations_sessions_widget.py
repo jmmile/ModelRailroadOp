@@ -537,6 +537,10 @@ class OperationsSessionsWidget(QWidget):
             "Start Session"
         )
 
+        self.validate_button = QPushButton(
+            "Validate Session"
+        )
+
         self.complete_button = QPushButton(
             "Complete Session"
         )
@@ -563,6 +567,10 @@ class OperationsSessionsWidget(QWidget):
 
         button_layout.addWidget(
             self.start_button
+        )
+
+        button_layout.addWidget(
+            self.validate_button
         )
 
         button_layout.addWidget(
@@ -1398,6 +1406,10 @@ class OperationsSessionsWidget(QWidget):
 
         self.start_button.clicked.connect(
             self.start_session
+        )
+
+        self.validate_button.clicked.connect(
+            self.validate_session
         )
 
         self.complete_button.clicked.connect(
@@ -4554,6 +4566,42 @@ class OperationsSessionsWidget(QWidget):
             return
 
         self.refresh()
+
+    def validate_session(self):
+        operations_session = self.get_selected_session()
+        if operations_session is None:
+            return
+
+        ready, report = OperationsSessionService.validate_pre_session(
+            operations_session.id
+        )
+        lines = [
+            f"Pre-Session Validation: {report['session_name']}",
+            "",
+        ]
+        for heading, key in (
+            ("ERRORS", "errors"),
+            ("WARNINGS", "warnings"),
+            ("PASSED", "passed"),
+        ):
+            entries = report[key]
+            lines.append(f"{heading} ({len(entries)})")
+            lines.extend(f"• {entry}" for entry in entries)
+            if not entries:
+                lines.append("• None")
+            lines.append("")
+
+        message = QMessageBox(self)
+        message.setWindowTitle("Pre-Session Validation")
+        message.setIcon(
+            QMessageBox.Information if ready else QMessageBox.Warning
+        )
+        message.setText(
+            "Ready to operate." if ready else "Resolve the errors before operating."
+        )
+        message.setDetailedText("\n".join(lines))
+        message.setStandardButtons(QMessageBox.Ok)
+        message.exec()
 
     def complete_session(
         self,
