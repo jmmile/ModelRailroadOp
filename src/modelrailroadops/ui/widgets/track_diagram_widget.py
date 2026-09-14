@@ -15,6 +15,11 @@ from PySide6.QtWidgets import (
 )
 
 from modelrailroadops.services.location_service import LocationService
+from modelrailroadops.database.database import SessionLocal
+from modelrailroadops.models.car import Car
+from modelrailroadops.services.waybill_service import WaybillService
+from modelrailroadops.ui.dialogs.add_waybill_dialog import AddWaybillDialog
+from modelrailroadops.ui.waybills.waybill_preview_dialog import WaybillPreviewDialog
 from modelrailroadops.services.industry_service import IndustryService
 from modelrailroadops.services.industry_demand_service import (
     IndustryDemandService,
@@ -28,6 +33,7 @@ class CarSymbolWidget(QFrame):
     """Compact car identification block used by the track diagram."""
 
     clicked = Signal(object)
+    double_clicked = Signal(object)
     SYMBOL_WIDTH = 126
 
     STATUS_COLORS = {
@@ -116,6 +122,13 @@ class CarSymbolWidget(QFrame):
         drag.setPixmap(self.grab())
         drag.setHotSpot(self._drag_start_position)
         drag.exec(Qt.MoveAction)
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.double_clicked.emit(self.car)
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
 
 
 class EmptySpotWidget(QFrame):
@@ -598,6 +611,8 @@ class TrackDiagramWidget(QWidget):
                     continue
                 symbol = CarSymbolWidget(car)
                 symbol.clicked.connect(self.show_car_details)
+                symbol.double_clicked.connect(self.create_pickup_waybill)
+                symbol.setToolTip(symbol.toolTip() + "\nDouble-click to assign a pickup waybill.")
                 if car.id == self.selected_car_id:
                     symbol.set_selected(True)
                 self.car_symbols.append(symbol)
@@ -632,6 +647,39 @@ class TrackDiagramWidget(QWidget):
 
         self.track_sections.append(section)
         target_layout.addWidget(section)
+
+    def create_pickup_waybill(self, selected_car):
+        # Re-read the location because the diagram may predate a recent move.
+        with SessionLocal() as session:
+            car = session.get(Car, selected_car.id)
+            if car is None or car.spot_id is None or car.industry_id is None:
+                return
+            car_id = car.id
+            load_state = (car.status or "").upper()
+
+        timer_running = self.refresh_timer.isActive()
+        self.refresh_timer.stop()
+        try:
+            existing = WaybillService.get_active_for_car(car_id)
+            if existing:
+                WaybillPreviewDialog(existing[0], self).exec()
+                return
+            dialog = AddWaybillDialog(self)
+            index = dialog.car_combo.findData(car_id)
+            if index < 0:
+                QMessageBox.information(self, "Pickup Waybill", "This car is no longer available for a new waybill.")
+                return
+            dialog.car_combo.setCurrentIndex(index)
+            dialog.car_changed()
+            dialog.car_combo.setEnabled(False)
+            load_index = dialog.load_state_combo.findData(load_state)
+            if load_index >= 0:
+                dialog.load_state_combo.setCurrentIndex(load_index)
+            dialog.setWindowTitle("Assign Pickup Waybill")
+            dialog.exec()
+        finally:
+            if timer_running:
+                self.refresh_timer.start()
 
     def show_car_details(self, car):
         self.selected_car_id = car.id

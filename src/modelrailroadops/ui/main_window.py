@@ -1,65 +1,60 @@
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QFileDialog,
     QMainWindow,
+    QMessageBox,
+    QPushButton,
     QTabWidget,
 )
 
+from modelrailroadops.services.database_backup_service import (
+    DatabaseBackupService,
+)
 from modelrailroadops.ui.cars.roster_tab import (
     RosterTab,
 )
-
 from modelrailroadops.ui.industries.industry_tab import (
     IndustryTab,
 )
-
-from modelrailroadops.ui.widgets.industry_tracks_widget import (
-    IndustryTracksWidget,
-)
-
-from modelrailroadops.ui.widgets.car_locations_widget import (
-    CarLocationsWidget,
-)
-
-from modelrailroadops.ui.widgets.spot_occupancy_widget import (
-    SpotOccupancyWidget,
-)
-
-from modelrailroadops.ui.widgets.spot_manager_widget import (
-    SpotManagerWidget,
-)
-
-from modelrailroadops.ui.widgets.car_history_widget import (
-    CarHistoryWidget,
-)
-
-from modelrailroadops.ui.waybills.waybills_widget import (
-    WaybillsWidget,
-)
-
-from modelrailroadops.ui.operations.operations_sessions_widget import (
-    OperationsSessionsWidget,
-)
-
-from modelrailroadops.ui.switch_list.switch_list_widget import (
-    SwitchListWidget,
-)
-
-from modelrailroadops.ui.trains.trains_widget import (
-    TrainsWidget,
-)
-
-from modelrailroadops.ui.widgets.locations_widget import (
-    LocationsWidget,
-)
-from modelrailroadops.ui.widgets.track_diagram_widget import (
-    TrackDiagramWidget,
-)
-
 from modelrailroadops.ui.locomotives.locomotives_widget import (
     LocomotivesWidget,
 )
-
+from modelrailroadops.ui.operations.operations_sessions_widget import (
+    OperationsSessionsWidget,
+)
 from modelrailroadops.ui.passenger_cars.passenger_cars_widget import (
     PassengerCarsWidget,
+)
+from modelrailroadops.ui.switch_list.switch_list_widget import (
+    SwitchListWidget,
+)
+from modelrailroadops.ui.trains.trains_widget import (
+    TrainsWidget,
+)
+from modelrailroadops.ui.waybills.waybills_widget import (
+    WaybillsWidget,
+)
+from modelrailroadops.ui.widgets.car_history_widget import (
+    CarHistoryWidget,
+)
+from modelrailroadops.ui.widgets.car_locations_widget import (
+    CarLocationsWidget,
+)
+from modelrailroadops.ui.widgets.dashboard_widget import DashboardWidget
+from modelrailroadops.ui.widgets.industry_tracks_widget import (
+    IndustryTracksWidget,
+)
+from modelrailroadops.ui.widgets.locations_widget import (
+    LocationsWidget,
+)
+from modelrailroadops.ui.widgets.spot_manager_widget import (
+    SpotManagerWidget,
+)
+from modelrailroadops.ui.widgets.spot_occupancy_widget import (
+    SpotOccupancyWidget,
+)
+from modelrailroadops.ui.widgets.track_diagram_widget import (
+    TrackDiagramWidget,
 )
 
 
@@ -89,11 +84,31 @@ class MainWindow(QMainWindow):
             800,
         )
 
+        self.create_file_menu()
+
         #
         # Main tab widget
         #
 
         self.tabs = QTabWidget()
+
+        #
+        # Dashboard
+        #
+
+        self.dashboard_widget = DashboardWidget()
+        self.dashboard_widget.backup_requested.connect(self.backup_database)
+        self.dashboard_widget.restore_requested.connect(self.restore_database)
+        self.dashboard_widget.navigate_requested.connect(self.open_tab)
+        self.tabs.addTab(self.dashboard_widget, "Dashboard")
+
+        self.dashboard_button = QPushButton("Dashboard")
+        self.dashboard_button.setToolTip("Return to the Dashboard")
+        self.dashboard_button.clicked.connect(self.open_dashboard)
+        self.tabs.setCornerWidget(
+            self.dashboard_button,
+            Qt.TopRightCorner,
+        )
 
         #
         # Car Roster
@@ -304,6 +319,86 @@ class MainWindow(QMainWindow):
             self.tabs
         )
 
+    def create_file_menu(self):
+        self.file_menu = self.menuBar().addMenu("File")
+
+        self.backup_database_action = self.file_menu.addAction(
+            "Backup Database..."
+        )
+        self.backup_database_action.triggered.connect(self.backup_database)
+
+        self.restore_database_action = self.file_menu.addAction(
+            "Restore Database..."
+        )
+        self.restore_database_action.triggered.connect(self.restore_database)
+
+    def backup_database(self):
+        default_path = DatabaseBackupService.default_backup_path()
+        filepath, _ = QFileDialog.getSaveFileName(
+            self,
+            "Backup Database",
+            str(default_path),
+            "Model Railroad Backup (*.db)",
+        )
+
+        if not filepath:
+            return
+
+        created, result = DatabaseBackupService.create_backup(filepath)
+        if not created:
+            QMessageBox.warning(self, "Backup Failed", result)
+            return
+
+        QMessageBox.information(
+            self,
+            "Backup Complete",
+            f"The database was backed up to:\n\n{result}",
+        )
+
+    def restore_database(self):
+        filepath, _ = QFileDialog.getOpenFileName(
+            self,
+            "Restore Database",
+            str(DatabaseBackupService.default_backup_path().parent),
+            "Model Railroad Backup (*.db)",
+        )
+
+        if not filepath:
+            return
+
+        answer = QMessageBox.question(
+            self,
+            "Restore Database",
+            (
+                "Replace the current database with this backup?\n\n"
+                f"{filepath}\n\n"
+                "A safety backup of the current database will be created first."
+            ),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+
+        if answer != QMessageBox.Yes:
+            return
+
+        restored, result = DatabaseBackupService.restore_backup(filepath)
+        if not restored:
+            QMessageBox.critical(self, "Restore Failed", result)
+            return
+
+        for index in range(self.tabs.count()):
+            self.tab_changed(index)
+
+        QMessageBox.information(
+            self,
+            "Restore Complete",
+            (
+                "The database was restored successfully.\n\n"
+                "The database that was active before the restore was saved to:\n\n"
+                f"{result}"
+            ),
+        )
+
     #
     # Industry database changed
     #
@@ -320,6 +415,15 @@ class MainWindow(QMainWindow):
         """
 
         self.industry_tracks_widget.refresh()
+
+    def open_tab(self, tab_name):
+        for index in range(self.tabs.count()):
+            if self.tabs.tabText(index) == tab_name:
+                self.tabs.setCurrentIndex(index)
+                return
+
+    def open_dashboard(self):
+        self.tabs.setCurrentWidget(self.dashboard_widget)
 
     #
     # Tab changed
@@ -342,7 +446,11 @@ class MainWindow(QMainWindow):
         # Car Roster
         #
 
-        if widget is self.roster_tab:
+        if widget is self.dashboard_widget:
+
+            self.dashboard_widget.refresh()
+
+        elif widget is self.roster_tab:
 
             self.roster_tab.refresh()
 

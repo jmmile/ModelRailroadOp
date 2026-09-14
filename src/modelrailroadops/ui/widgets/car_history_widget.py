@@ -10,11 +10,13 @@ from PySide6.QtWidgets import (
     QTableView,
     QHeaderView,
     QAbstractItemView,
+    QMessageBox,
 )
 
 from modelrailroadops.database.database import SessionLocal
 
 from modelrailroadops.models.car import Car
+from modelrailroadops.services.car_location_service import CarLocationService
 
 from modelrailroadops.ui.models.car_history_table_model import (
     CarHistoryTableModel,
@@ -69,6 +71,16 @@ class CarHistoryWidget(QWidget):
 
         filter_layout.addWidget(
             self.refresh_button
+        )
+
+
+        self.undo_button = QPushButton(
+            "Undo Last Movement"
+        )
+
+
+        filter_layout.addWidget(
+            self.undo_button
         )
 
 
@@ -163,6 +175,11 @@ class CarHistoryWidget(QWidget):
         )
 
 
+        self.undo_button.clicked.connect(
+            self.undo_last_movement
+        )
+
+
         #
         # Initial Load
         #
@@ -226,6 +243,57 @@ class CarHistoryWidget(QWidget):
 
 
         self.table.resizeColumnsToContents()
+
+
+    def undo_last_movement(self):
+        car_id = self.car_combo.currentData()
+
+        found, result = CarLocationService.get_last_movement_summary(
+            car_id=car_id,
+        )
+
+        if not found:
+            QMessageBox.information(self, "Undo Last Movement", result)
+            return
+
+        if result["operations_session_id"] is not None:
+            QMessageBox.warning(
+                self,
+                "Undo Last Movement",
+                (
+                    "This movement belongs to an Operations Session and "
+                    "cannot be undone here. Use the Switch List workflow "
+                    "to keep the move and Waybill statuses synchronized."
+                ),
+            )
+            return
+
+        answer = QMessageBox.question(
+            self,
+            "Undo Last Movement",
+            (
+                f"Return {result['car']} from:\n\n"
+                f"{result['to_location']}\n\n"
+                f"to:\n\n{result['from_location']}?"
+            ),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+
+        if answer != QMessageBox.Yes:
+            return
+
+        undone, message = CarLocationService.undo_last_movement(
+            car_id=car_id,
+            movement_id=result["movement_id"],
+        )
+
+        if not undone:
+            QMessageBox.warning(self, "Undo Last Movement", message)
+            return
+
+        self.refresh()
+        QMessageBox.information(self, "Undo Last Movement", message)
 
 
     def refresh(self):

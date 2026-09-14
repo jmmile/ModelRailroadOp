@@ -393,6 +393,11 @@ class OperationsSessionService:
                     ),
                 )
 
+            from modelrailroadops.services.database_backup_service import DatabaseBackupService
+
+            backed_up, message = DatabaseBackupService.automatic_backup(session)
+            if not backed_up:
+                return False, message
             operations_session.status = "ACTIVE"
 
             session.commit()

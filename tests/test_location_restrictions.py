@@ -236,3 +236,120 @@ def test_return_to_industry_spot_records_on_train_origin(test_database):
             movement.to_location
             == "Acme Transfer Company - Loading Dock - Spot 1"
         )
+
+
+def test_undo_last_manual_movement_restores_general_track(test_database):
+    with test_database.SessionLocal() as session:
+        yard = Location(name="Weston Yard", location_type="YARD", active=True)
+        industry_location = Location(
+            name="Acme Transfer Company",
+            location_type="INDUSTRY",
+            active=True,
+        )
+        session.add_all((yard, industry_location))
+        session.flush()
+
+        yard_track = LocationTrack(
+            location_id=yard.id,
+            name="Arrival",
+            track_type="YARD",
+            traffic_use="BOTH",
+            capacity=4,
+            active=True,
+        )
+        industry_location_track = LocationTrack(
+            location_id=industry_location.id,
+            name="Loading Dock",
+            track_type="INDUSTRY",
+            traffic_use="BOTH",
+            capacity=1,
+            active=True,
+        )
+        industry = Industry(
+            name="Acme Transfer Company",
+            railroad="GN",
+            location="Pine Bluff",
+            operating_location_id=industry_location.id,
+        )
+        session.add_all((yard_track, industry_location_track, industry))
+        session.flush()
+
+        industry_track = IndustryTrack(
+            industry_id=industry.id,
+            name="Loading Dock",
+            operating_track_id=industry_location_track.id,
+        )
+        session.add(industry_track)
+        session.flush()
+        spot = Spot(track_id=industry_track.id, spot_number=1)
+        car = Car(
+            reporting_mark="GN",
+            number="33103",
+            owner="GN",
+            car_type="Boxcar",
+            status="EMPTY",
+            location="Weston Yard - Arrival",
+            operating_location_id=yard.id,
+            operating_track_id=yard_track.id,
+            operating_track_position=1,
+        )
+        session.add_all((spot, car))
+        session.commit()
+        car_id = car.id
+        spot_id = spot.id
+        yard_track_id = yard_track.id
+
+    moved, message = CarLocationService.assign_car_to_spot_with_message(
+        car_id,
+        spot_id,
+    )
+    assert moved, message
+
+    undone, message = CarLocationService.undo_last_movement(car_id=car_id)
+    assert undone, message
+
+    with test_database.SessionLocal() as session:
+        car = session.get(Car, car_id)
+        movements = session.execute(select(CarMovement)).scalars().all()
+        assert car.location == "Weston Yard - Arrival"
+        assert car.operating_track_id == yard_track_id
+        assert car.industry_id is None
+        assert car.spot_id is None
+        assert car.operating_track_position == 1
+        assert movements == []
+
+
+def test_undo_refuses_operations_session_movement(test_database):
+    with test_database.SessionLocal() as session:
+        operations_session = OperationsSession(
+            name="Protected Session",
+            session_date=date(2026, 9, 13),
+            status="ACTIVE",
+        )
+        car = Car(
+            reporting_mark="GN",
+            number="33103",
+            owner="GN",
+            car_type="Boxcar",
+            status="EMPTY",
+            location="On Train: L201",
+        )
+        session.add_all((operations_session, car))
+        session.flush()
+        movement = CarMovement(
+            car_id=car.id,
+            operations_session_id=operations_session.id,
+            from_location="Weston Yard - Arrival",
+            to_location="On Train: L201",
+            movement_type="PICKUP",
+        )
+        session.add(movement)
+        session.commit()
+        car_id = car.id
+
+    undone, message = CarLocationService.undo_last_movement(car_id=car_id)
+
+    assert not undone
+    assert "Operations Session" in message
+    with test_database.SessionLocal() as session:
+        assert session.scalar(select(func.count()).select_from(CarMovement)) == 1

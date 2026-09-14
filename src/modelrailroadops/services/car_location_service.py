@@ -44,6 +44,212 @@ class CarLocationService:
         last_position = max(positions) if positions else 0
         return max(last_position, len(cars)) + 1
 
+    @staticmethod
+    def get_last_movement_summary(car_id=None):
+        """Return the most recent movement that would be undone."""
+
+        with SessionLocal() as session:
+            statement = select(CarMovement).order_by(
+                CarMovement.timestamp.desc(),
+                CarMovement.id.desc(),
+            )
+
+            if car_id is not None:
+                statement = statement.where(CarMovement.car_id == car_id)
+
+            movement = session.execute(statement).scalars().first()
+
+            if movement is None:
+                return False, "No car movement is available to undo."
+
+            car = session.get(Car, movement.car_id)
+            if car is None:
+                return False, "The car for the last movement was not found."
+
+            return True, {
+                "movement_id": movement.id,
+                "car_id": car.id,
+                "car": f"{car.reporting_mark} {car.number}",
+                "from_location": movement.from_location or "Unassigned",
+                "to_location": movement.to_location or "Unassigned",
+                "movement_type": movement.movement_type,
+                "operations_session_id": movement.operations_session_id,
+            }
+
+    @staticmethod
+    def undo_last_movement(car_id=None, movement_id=None):
+        """Restore a car to the origin of its most recent manual movement.
+
+        Session-linked movements are deliberately excluded because reversing
+        only their car location would leave switch-list and Waybill state out
+        of sync. On success, the original movement record is removed so the
+        preceding movement becomes the next available undo.
+        """
+
+        with SessionLocal() as session:
+            statement = select(CarMovement).order_by(
+                CarMovement.timestamp.desc(),
+                CarMovement.id.desc(),
+            )
+
+            if car_id is not None:
+                statement = statement.where(CarMovement.car_id == car_id)
+
+            movement = session.execute(statement).scalars().first()
+
+            if movement is None:
+                return False, "No car movement is available to undo."
+
+            if movement_id is not None and movement.id != movement_id:
+                return False, (
+                    "The movement history changed after the confirmation "
+                    "was displayed. Refresh and try again."
+                )
+
+            if movement.operations_session_id is not None:
+                return False, (
+                    "This movement belongs to an Operations Session and "
+                    "cannot be undone here. Use the Switch List workflow "
+                    "to keep the move and Waybill statuses synchronized."
+                )
+
+            car = session.get(Car, movement.car_id)
+            if car is None:
+                return False, "The car for the last movement was not found."
+
+            current_location = car.location or "Unassigned"
+            recorded_destination = movement.to_location or "Unassigned"
+            if current_location != recorded_destination:
+                return False, (
+                    f"{car.reporting_mark} {car.number} is no longer at "
+                    f"the recorded destination ({recorded_destination})."
+                )
+
+            prior_location = movement.from_location or "Unassigned"
+
+            if prior_location == "Unassigned":
+                car.industry_id = None
+                car.track_id = None
+                car.spot_id = None
+                car.operating_location_id = None
+                car.operating_track_id = None
+                car.operating_track_position = None
+
+            elif prior_location.startswith("On Train:"):
+                return False, (
+                    "A train movement cannot be restored from location "
+                    "history alone. Use the Switch List workflow instead."
+                )
+
+            else:
+                destination_spot = None
+                destination_industry = None
+                destination_industry_track = None
+
+                spot_rows = session.execute(
+                    select(Spot, IndustryTrack, Industry)
+                    .join(IndustryTrack, Spot.track_id == IndustryTrack.id)
+                    .join(Industry, IndustryTrack.industry_id == Industry.id)
+                ).all()
+
+                for spot, industry_track, industry in spot_rows:
+                    label = (
+                        f"{industry.name} - {industry_track.name} - "
+                        f"Spot {spot.spot_number}"
+                    )
+                    if label == prior_location:
+                        destination_spot = spot
+                        destination_industry_track = industry_track
+                        destination_industry = industry
+                        break
+
+                if destination_spot is not None:
+                    valid, message = CarLocationService.validate_car_for_spot(
+                        car,
+                        destination_spot,
+                    )
+                    if not valid:
+                        return False, message
+
+                    occupying_car = session.execute(
+                        select(Car).where(
+                            Car.spot_id == destination_spot.id,
+                            Car.id != car.id,
+                        )
+                    ).scalars().first()
+                    if occupying_car is not None:
+                        return False, "The former destination spot is occupied."
+
+                    car.industry_id = destination_industry.id
+                    car.track_id = destination_industry_track.id
+                    car.spot_id = destination_spot.id
+                    car.operating_location_id = (
+                        destination_industry.operating_location_id
+                    )
+                    car.operating_track_id = (
+                        destination_industry_track.operating_track_id
+                    )
+                    car.operating_track_position = None
+
+                else:
+                    destination_location = None
+                    destination_track = None
+                    track_rows = session.execute(
+                        select(LocationTrack, Location).join(
+                            Location,
+                            LocationTrack.location_id == Location.id,
+                        )
+                    ).all()
+
+                    for location_track, location in track_rows:
+                        if f"{location.name} - {location_track.name}" == prior_location:
+                            destination_location = location
+                            destination_track = location_track
+                            break
+
+                    if destination_track is None:
+                        return False, (
+                            f"The former location '{prior_location}' no "
+                            "longer exists."
+                        )
+
+                    if not destination_location.active or not destination_track.active:
+                        return False, "The former location or track is inactive."
+
+                    if destination_track.capacity is not None:
+                        occupied = len(
+                            session.execute(
+                                select(Car).where(
+                                    Car.operating_track_id == destination_track.id,
+                                    Car.id != car.id,
+                                )
+                            ).scalars().all()
+                        )
+                        if occupied >= destination_track.capacity:
+                            return False, "The former track is at capacity."
+
+                    car.industry_id = None
+                    car.track_id = None
+                    car.spot_id = None
+                    car.operating_location_id = destination_location.id
+                    car.operating_track_id = destination_track.id
+                    car.operating_track_position = (
+                        CarLocationService._next_track_position(
+                            session,
+                            destination_track.id,
+                            car.id,
+                        )
+                    )
+
+            car.location = prior_location
+            car_label = f"{car.reporting_mark} {car.number}"
+            session.delete(movement)
+            session.commit()
+
+            return True, (
+                f"{car_label} was returned to {prior_location}."
+            )
+
     # ==========================================================
     # OPERATIONS SESSION MOVEMENT STATE
     # ==========================================================
