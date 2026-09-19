@@ -765,6 +765,27 @@
         let moveConfirmationResolver = null;
 
         let trains = [];
+        const MOVE_REFRESH_MS = 4000;
+        let moveRequestVersion = 0;
+        let trainRequestVersion = 0;
+        let activeMoveRequests = 0;
+        let completingMoves = 0;
+
+        function moveRefreshPaused() {
+            return moveConfirmationModal.classList.contains("visible") ||
+                waybillModal.classList.contains("visible") ||
+                completingMoves > 0;
+        }
+
+        async function refreshMovesAutomatically() {
+            if (companionScreen.style.display === "none" ||
+                document.hidden || trainSelect.disabled ||
+                !sessionSelect.value || !trainSelect.value ||
+                activeMoveRequests > 0 || moveRefreshPaused()) {
+                return;
+            }
+            await loadMoves(sessionSelect.value, trainSelect.value, true);
+        }
 
 
         function escapeHtml(value) {
@@ -775,6 +796,8 @@
 
 
         function showPairingScreen() {
+            moveRequestVersion++;
+            trainRequestVersion++;
             closeWaybillDetails();
 
             companionScreen.style.display = "none";
@@ -1268,6 +1291,8 @@
 
 
         async function loadTrains(sessionId) {
+            const requestVersion = ++trainRequestVersion;
+            moveRequestVersion++;
             trains = [];
 
             trainSummary.style.display = "none";
@@ -1304,7 +1329,10 @@
                     );
                 }
 
-                trains = await response.json();
+                const loadedTrains = await response.json();
+                if (requestVersion !== trainRequestVersion ||
+                    sessionId !== sessionSelect.value) return;
+                trains = loadedTrains;
 
                 trainSelect.innerHTML = `
                     <option value="">
@@ -1340,6 +1368,8 @@
 
                 trainSelect.disabled = false;
             } catch (error) {
+                if (requestVersion !== trainRequestVersion ||
+                    sessionId !== sessionSelect.value) return;
                 if (
                     companionScreen.style.display !== "none"
                 ) {
@@ -1392,8 +1422,15 @@
 
         async function loadMoves(
             sessionId,
-            trainId
+            trainId,
+            automatic = false
         ) {
+            const requestVersion = ++moveRequestVersion;
+            const isCurrent = () =>
+                requestVersion === moveRequestVersion &&
+                sessionId === sessionSelect.value &&
+                trainId === trainSelect.value &&
+                companionScreen.style.display !== "none";
             if (!sessionId || !trainId) {
                 showMessage(
                     "Select an Operations Session and Train."
@@ -1401,12 +1438,14 @@
                 return;
             }
 
-            showMessage("Loading train work...");
+            if (!automatic) showMessage("Loading train work...");
+            activeMoveRequests++;
 
             try {
                 const response = await authenticatedFetch(
                     `/api/sessions/${sessionId}` +
-                    `/trains/${trainId}/moves`
+                    `/trains/${trainId}/moves`,
+                    {cache: "no-store"}
                 );
 
                 if (!response.ok) {
@@ -1417,16 +1456,20 @@
 
                 const moves = await response.json();
 
-                renderMoves(moves);
+                if (isCurrent() && !(automatic && moveRefreshPaused())) {
+                    renderMoves(moves);
+                }
             } catch (error) {
                 if (
-                    companionScreen.style.display !== "none"
+                    isCurrent() && !automatic
                 ) {
                     showMessage(
                         error.message,
                         true
                     );
                 }
+            } finally {
+                activeMoveRequests--;
             }
         }
 
@@ -1708,6 +1751,8 @@
                 completeButton.disabled = true;
                 completeButton.textContent =
                     "Completing...";
+                completingMoves++;
+                moveRequestVersion++;
 
                 try {
                     const response =
@@ -1752,6 +1797,8 @@
                         completeButton.textContent =
                             originalText;
                     }
+                } finally {
+                    completingMoves--;
                 }
             }
         );
@@ -1827,6 +1874,8 @@
         );
 
 
+        // One timer for the page; selection changes never create more timers.
+        setInterval(refreshMovesAutomatically, MOVE_REFRESH_MS);
         checkAuthentication();
     </script>
 </body>
