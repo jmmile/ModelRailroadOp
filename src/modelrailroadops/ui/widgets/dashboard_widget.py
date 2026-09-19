@@ -114,7 +114,7 @@ class DashboardWidget(QWidget):
         backups.addWidget(self.restore_button)
         backups.addWidget(
             QLabel(
-                "Automatic backup before session start; latest 10 retained.\nDatabase only; car image files are not included."
+                "Manual backups include database and car images.\nAutomatic session backups: database only; latest 10 retained."
             )
         )
         layout.addLayout(backups)

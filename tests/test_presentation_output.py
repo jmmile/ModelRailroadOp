@@ -583,9 +583,9 @@ def test_car_image_lookup_accepts_case_insensitive_png_name(
 
     monkeypatch.setattr(
         WaybillFormRenderer,
-        "_project_root",
+        "image_directory",
         staticmethod(
-            lambda: tmp_path
+            lambda: image_directory
         ),
     )
 

@@ -1,4 +1,5 @@
 from pathlib import Path
+from modelrailroadops.paths import DATA_DIRECTORY
 
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QFont, QImage, QPainter, QPen, QPixmap
@@ -29,6 +30,10 @@ class WaybillFormRenderer:
         "/"
         "Car_Images"
     )
+
+    @classmethod
+    def image_directory(cls):
+        return DATA_DIRECTORY / "Car_Images"
 
     def __init__(
         self,
@@ -374,10 +379,7 @@ class WaybillFormRenderer:
         if not reporting_mark or not number:
             return None
 
-        image_directory = (
-            cls._project_root()
-            / cls.IMAGE_DIRECTORY
-        )
+        image_directory = cls.image_directory()
 
         if not image_directory.is_dir():
             return None

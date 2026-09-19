@@ -2,6 +2,10 @@ from sqlalchemy import (
     select,
 )
 
+from sqlalchemy.orm import (
+    joinedload,
+)
+
 from modelrailroadops.database.database import SessionLocal
 
 from modelrailroadops.models.operations_session_train import (
@@ -27,6 +31,11 @@ class OperationsSessionTrainService:
             statement = (
                 select(
                     OperationsSessionTrain
+                )
+                .options(
+                    joinedload(
+                        OperationsSessionTrain.train
+                    )
                 )
                 .order_by(
                     OperationsSessionTrain.operations_session_id,
@@ -57,9 +66,27 @@ class OperationsSessionTrainService:
 
         with SessionLocal() as session:
 
-            return session.get(
-                OperationsSessionTrain,
-                assignment_id,
+            statement = (
+                select(
+                    OperationsSessionTrain
+                )
+                .options(
+                    joinedload(
+                        OperationsSessionTrain.train
+                    )
+                )
+                .where(
+                    OperationsSessionTrain.id
+                    == assignment_id
+                )
+            )
+
+            return (
+                session.execute(
+                    statement
+                )
+                .scalars()
+                .first()
             )
 
     #
@@ -80,6 +107,11 @@ class OperationsSessionTrainService:
             statement = (
                 select(
                     OperationsSessionTrain
+                )
+                .options(
+                    joinedload(
+                        OperationsSessionTrain.train
+                    )
                 )
                 .where(
                     OperationsSessionTrain.operations_session_id
@@ -116,6 +148,11 @@ class OperationsSessionTrainService:
             statement = (
                 select(
                     OperationsSessionTrain
+                )
+                .options(
+                    joinedload(
+                        OperationsSessionTrain.train
+                    )
                 )
                 .where(
                     OperationsSessionTrain.train_id

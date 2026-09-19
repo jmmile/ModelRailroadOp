@@ -1,4 +1,4 @@
-from pathlib import Path
+from modelrailroadops.paths import DATA_DIRECTORY, PROJECT_ROOT
 
 from sqlalchemy import (
     create_engine,
@@ -18,15 +18,7 @@ from modelrailroadops.database.base import Base
 # Database location
 #
 
-PROJECT_ROOT = (
-    Path(__file__).resolve().parents[3]
-)
-
-DATABASE_FILE = (
-    PROJECT_ROOT
-    / "data"
-    / "railroad.db"
-)
+DATABASE_FILE = DATA_DIRECTORY / "railroad.db"
 
 engine = create_engine(
     f"sqlite:///{DATABASE_FILE}",
@@ -380,6 +372,7 @@ def initialize_database():
     # Create tables that do not already exist.
     #
 
+    DATABASE_FILE.parent.mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(
         bind=engine,
     )

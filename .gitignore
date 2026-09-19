@@ -4,6 +4,14 @@ __pycache__/
 *.pyc
 *.pyo
 .pytest_cache/
+.pytest_temp/
+.ruff_cache/
+build/
+dist/
+data/backups/
+data/logs/
+/Locomotive List.csv
+/Passenger Car List.csv
 
 *.egg-info/
 logs/
@@ -31,3 +39,5 @@ jmri-car-roster/
 /update_*.py
 /add_operations_session_to_waybills.py
 
+data/web_test/
+ModelRailroadOperations-Setup-*.exe

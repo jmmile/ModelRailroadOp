@@ -1,0 +1,1834 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>Model Railroad Operations</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: #f3f4f6;
+            color: #1f2937;
+            font-family:
+                -apple-system,
+                BlinkMacSystemFont,
+                "Segoe UI",
+                sans-serif;
+            font-size: 18px;
+        }
+
+        body.modal-open {
+            overflow: hidden;
+        }
+
+        header {
+            background: #1f2937;
+            color: white;
+            padding: 18px 20px;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 26px;
+        }
+
+        header p {
+            margin: 5px 0 0 0;
+            color: #d1d5db;
+            font-size: 15px;
+        }
+
+        main {
+            width: min(900px, 100%);
+            margin: 0 auto;
+            padding: 18px;
+        }
+
+        .panel {
+            background: white;
+            border-radius: 12px;
+            padding: 18px;
+            margin-bottom: 18px;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+        }
+
+        .field {
+            margin-bottom: 16px;
+        }
+
+        .field:last-child {
+            margin-bottom: 0;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 7px;
+            font-weight: 700;
+        }
+
+        select,
+        input {
+            width: 100%;
+            min-height: 52px;
+            padding: 8px 12px;
+            border: 1px solid #9ca3af;
+            border-radius: 9px;
+            background: white;
+            color: #111827;
+            font-size: 18px;
+        }
+
+        select:disabled {
+            background: #e5e7eb;
+            color: #6b7280;
+        }
+
+        button {
+            width: 100%;
+            min-height: 54px;
+            border: 0;
+            border-radius: 9px;
+            background: #2563eb;
+            color: white;
+            font-size: 19px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            background: #9ca3af;
+            cursor: default;
+        }
+
+        #pairing-screen {
+            display: none;
+            max-width: 520px;
+            margin: 30px auto 0 auto;
+        }
+
+        #companion-screen {
+            display: none;
+        }
+
+        .pairing-title {
+            margin: 0 0 8px 0;
+            font-size: 25px;
+        }
+
+        .pairing-description {
+            margin: 0 0 20px 0;
+            color: #4b5563;
+            line-height: 1.5;
+        }
+
+        #pairing-code {
+            text-align: center;
+            font-size: 30px;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+        }
+
+        .pairing-message {
+            display: none;
+            margin-top: 14px;
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .pairing-error {
+            display: block;
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .train-summary {
+            display: none;
+            margin-top: 16px;
+            padding: 14px;
+            border-radius: 9px;
+            background: #f9fafb;
+            line-height: 1.5;
+        }
+
+        .section-heading {
+            margin: 4px 0 14px 0;
+            font-size: 23px;
+        }
+
+        .message {
+            padding: 22px;
+            border-radius: 10px;
+            background: white;
+            text-align: center;
+            color: #4b5563;
+        }
+
+        .move-card {
+            background: white;
+            border-radius: 12px;
+            margin-bottom: 16px;
+            overflow: hidden;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.14);
+        }
+
+        .move-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 14px 16px;
+            color: white;
+        }
+
+        .move-card.pickup .move-header {
+            background: #2563eb;
+        }
+
+        .move-card.setout .move-header {
+            background: #047857;
+        }
+
+        .move-type {
+            font-size: 23px;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+        }
+
+        .route-sequence {
+            font-size: 15px;
+            font-weight: 700;
+        }
+
+        .move-body {
+            padding: 17px;
+        }
+
+        .car {
+            margin-bottom: 6px;
+            font-size: 26px;
+            font-weight: 800;
+        }
+
+        .car-details {
+            margin-bottom: 16px;
+            color: #4b5563;
+            font-size: 17px;
+        }
+
+        .location-label {
+            margin-bottom: 4px;
+            color: #6b7280;
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .location {
+            font-size: 21px;
+            font-weight: 700;
+            line-height: 1.35;
+        }
+
+        .move-footer {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px 18px;
+            margin-top: 17px;
+            padding-top: 13px;
+            border-top: 1px solid #e5e7eb;
+            color: #6b7280;
+            font-size: 14px;
+        }
+
+        .status-completed {
+            font-weight: 700;
+        }
+
+        .waybill-button {
+            width: auto;
+            min-height: 44px;
+            padding: 8px 14px;
+            border: 1px solid #2563eb;
+            border-radius: 8px;
+            background: #eff6ff;
+            color: #1d4ed8;
+            font-size: 16px;
+            font-weight: 800;
+        }
+
+        .waybill-button:active {
+            background: #dbeafe;
+        }
+
+        .complete-move-button {
+            width: 100%;
+            min-height: 58px;
+            margin-top: 16px;
+            font-size: 19px;
+            font-weight: 800;
+        }
+
+        .complete-move-button.pickup {
+            background: #2563eb;
+        }
+
+        .complete-move-button.setout {
+            background: #047857;
+        }
+
+        .complete-move-button:disabled {
+            background: #9ca3af;
+        }
+
+        .move-error {
+            display: none;
+            margin-top: 12px;
+            padding: 11px 12px;
+            border-radius: 8px;
+            background: #fee2e2;
+            color: #991b1b;
+            font-size: 15px;
+            font-weight: 600;
+            line-height: 1.4;
+        }
+
+        .error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .modal-backdrop {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            padding: 18px;
+            background: rgba(17, 24, 39, 0.62);
+            overflow-y: auto;
+        }
+
+        .modal-backdrop.visible {
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+        }
+
+        .waybill-dialog {
+            width: min(650px, 100%);
+            margin: 30px auto;
+            overflow: hidden;
+            border-radius: 14px;
+            background: white;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .waybill-dialog-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 17px 19px;
+            background: #1f2937;
+            color: white;
+        }
+
+        .waybill-dialog-title {
+            margin: 0;
+            font-size: 24px;
+        }
+
+        .waybill-dialog-body {
+            padding: 19px;
+        }
+
+        .waybill-car {
+            margin-bottom: 5px;
+            font-size: 28px;
+            font-weight: 800;
+        }
+
+        .waybill-car-type {
+            margin-bottom: 20px;
+            color: #4b5563;
+            font-size: 17px;
+        }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+        }
+
+        .detail-item {
+            min-width: 0;
+            padding: 13px;
+            border-radius: 9px;
+            background: #f9fafb;
+        }
+
+        .detail-item.full-width {
+            grid-column: 1 / -1;
+        }
+
+        .detail-label {
+            margin-bottom: 5px;
+            color: #6b7280;
+            font-size: 13px;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+
+        .detail-value {
+            overflow-wrap: anywhere;
+            color: #111827;
+            font-size: 18px;
+            font-weight: 600;
+            line-height: 1.4;
+        }
+
+        .waybill-dialog-message {
+            padding: 25px 18px;
+            text-align: center;
+            color: #4b5563;
+        }
+
+        .waybill-dialog-message.error {
+            margin: 18px;
+            border-radius: 9px;
+        }
+
+        .waybill-dialog-footer {
+            padding: 0 19px 19px 19px;
+        }
+
+        .close-waybill-button {
+            background: #374151;
+        }
+
+        .move-confirmation-dialog {
+            width: min(500px, 100%);
+            margin: 80px auto 30px auto;
+            overflow: hidden;
+            border-radius: 14px;
+            background: white;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .move-confirmation-header {
+            padding: 17px 19px;
+            background: #1f2937;
+            color: white;
+        }
+
+        .move-confirmation-title {
+            margin: 0;
+            font-size: 24px;
+        }
+
+        .move-confirmation-body {
+            padding: 24px 19px;
+            font-size: 19px;
+            line-height: 1.5;
+        }
+
+        .move-confirmation-car {
+            margin-top: 8px;
+            font-size: 26px;
+            font-weight: 800;
+        }
+
+        .move-confirmation-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            padding: 0 19px 19px 19px;
+        }
+
+        .move-confirmation-cancel {
+            background: #6b7280;
+        }
+
+        .move-confirmation-complete.pickup {
+            background: #2563eb;
+        }
+
+        .move-confirmation-complete.setout {
+            background: #15803d;
+        }
+
+        @media (max-width: 600px) {
+            main {
+                padding: 12px;
+            }
+
+            header {
+                padding: 15px;
+            }
+
+            header h1 {
+                font-size: 22px;
+            }
+
+            .panel {
+                padding: 14px;
+            }
+
+            .car {
+                font-size: 23px;
+            }
+
+            .location {
+                font-size: 19px;
+            }
+
+            #pairing-code {
+                font-size: 27px;
+            }
+
+            .modal-backdrop {
+                padding: 10px;
+            }
+
+            .waybill-dialog {
+                margin: 10px auto;
+            }
+
+            .waybill-dialog-header {
+                padding: 15px;
+            }
+
+            .waybill-dialog-title {
+                font-size: 21px;
+            }
+
+            .waybill-dialog-body {
+                padding: 15px;
+            }
+
+            .waybill-car {
+                font-size: 25px;
+            }
+
+            .detail-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .detail-item.full-width {
+                grid-column: auto;
+            }
+
+            .waybill-dialog-footer {
+                padding: 0 15px 15px 15px;
+            }
+
+            .waybill-button {
+                min-height: 48px;
+                padding: 9px 15px;
+                font-size: 17px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>Model Railroad Operations</h1>
+        <p>Companion</p>
+    </header>
+
+    <main>
+        <section id="pairing-screen" class="panel">
+            <h2 class="pairing-title">
+                Pair This Device
+            </h2>
+
+            <p class="pairing-description">
+                Enter the six-digit pairing code shown on the
+                Windows computer running Model Railroad Operations.
+            </p>
+
+            <form id="pairing-form">
+                <div class="field">
+                    <label for="pairing-code">
+                        Pairing Code
+                    </label>
+
+                    <input id="pairing-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6"
+                        pattern="[0-9]{6}" placeholder="000000" required>
+                </div>
+
+                <button id="pair-button" type="submit">
+                    Pair This Device
+                </button>
+            </form>
+
+            <div id="pairing-message" class="pairing-message"></div>
+        </section>
+
+        <div id="companion-screen">
+            <section class="panel">
+                <div class="field">
+                    <label for="session-select">
+                        Operations Session
+                    </label>
+
+                    <select id="session-select">
+                        <option value="">
+                            Loading sessions...
+                        </option>
+                    </select>
+                </div>
+
+                <div class="field">
+                    <label for="train-select">
+                        Train
+                    </label>
+
+                    <select id="train-select" disabled>
+                        <option value="">
+                            Select an Operations Session
+                        </option>
+                    </select>
+                </div>
+
+                <div id="train-summary" class="train-summary"></div>
+            </section>
+
+            <section>
+                <h2 class="section-heading">
+                    Train Work
+                </h2>
+
+                <div id="moves">
+                    <div class="message">
+                        Select an Operations Session and Train.
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <div id="waybill-modal" class="modal-backdrop" role="dialog" aria-modal="true"
+        aria-labelledby="waybill-dialog-title">
+        <div class="waybill-dialog">
+            <div class="waybill-dialog-header">
+                <h2 id="waybill-dialog-title" class="waybill-dialog-title">
+                    Waybill Details
+                </h2>
+            </div>
+
+            <div id="waybill-dialog-content" class="waybill-dialog-body">
+                <div class="waybill-dialog-message">
+                    Loading Waybill...
+                </div>
+            </div>
+
+            <div class="waybill-dialog-footer">
+                <button id="close-waybill-button" class="close-waybill-button" type="button">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div
+        id="move-confirmation-modal"
+        class="modal-backdrop"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="move-confirmation-title"
+    >
+        <div class="move-confirmation-dialog">
+            <div class="move-confirmation-header">
+                <h2
+                    id="move-confirmation-title"
+                    class="move-confirmation-title"
+                >
+                    Complete Move
+                </h2>
+            </div>
+
+            <div class="move-confirmation-body">
+                <div id="move-confirmation-message">
+                    Confirm this move?
+                </div>
+
+                <div
+                    id="move-confirmation-car"
+                    class="move-confirmation-car"
+                ></div>
+            </div>
+
+            <div class="move-confirmation-footer">
+                <button
+                    id="move-confirmation-cancel"
+                    class="move-confirmation-cancel"
+                    type="button"
+                >
+                    Cancel
+                </button>
+
+                <button
+                    id="move-confirmation-complete"
+                    class="move-confirmation-complete"
+                    type="button"
+                >
+                    Complete Move
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const pairingScreen =
+            document.getElementById("pairing-screen");
+
+        const companionScreen =
+            document.getElementById("companion-screen");
+
+        const pairingForm =
+            document.getElementById("pairing-form");
+
+        const pairingCode =
+            document.getElementById("pairing-code");
+
+        const pairButton =
+            document.getElementById("pair-button");
+
+        const pairingMessage =
+            document.getElementById("pairing-message");
+
+        const sessionSelect =
+            document.getElementById("session-select");
+
+        const trainSelect =
+            document.getElementById("train-select");
+
+        const trainSummary =
+            document.getElementById("train-summary");
+
+        const movesContainer =
+            document.getElementById("moves");
+
+        const waybillModal =
+            document.getElementById("waybill-modal");
+
+        const waybillDialogTitle =
+            document.getElementById("waybill-dialog-title");
+
+        const waybillDialogContent =
+            document.getElementById("waybill-dialog-content");
+
+        const closeWaybillButton =
+            document.getElementById("close-waybill-button");
+
+        const moveConfirmationModal =
+            document.getElementById(
+                "move-confirmation-modal"
+            );
+
+        const moveConfirmationTitle =
+            document.getElementById(
+                "move-confirmation-title"
+            );
+
+        const moveConfirmationMessage =
+            document.getElementById(
+                "move-confirmation-message"
+            );
+
+        const moveConfirmationCar =
+            document.getElementById(
+                "move-confirmation-car"
+            );
+
+        const moveConfirmationCancel =
+            document.getElementById(
+                "move-confirmation-cancel"
+            );
+
+        const moveConfirmationComplete =
+            document.getElementById(
+                "move-confirmation-complete"
+            );
+
+        let moveConfirmationResolver = null;
+
+        let trains = [];
+
+
+        function escapeHtml(value) {
+            const div = document.createElement("div");
+            div.textContent = value ?? "";
+            return div.innerHTML;
+        }
+
+
+        function showPairingScreen() {
+            closeWaybillDetails();
+
+            companionScreen.style.display = "none";
+            pairingScreen.style.display = "block";
+
+            pairingCode.value = "";
+            pairingCode.focus();
+        }
+
+
+        function showCompanionScreen() {
+            pairingScreen.style.display = "none";
+            companionScreen.style.display = "block";
+        }
+
+
+        function showPairingError(message) {
+            pairingMessage.textContent = message;
+            pairingMessage.className =
+                "pairing-message pairing-error";
+        }
+
+
+        function clearPairingMessage() {
+            pairingMessage.textContent = "";
+            pairingMessage.className = "pairing-message";
+        }
+
+
+        function showMessage(
+            message,
+            isError = false
+        ) {
+            movesContainer.innerHTML = `
+                <div class="message ${isError ? "error" : ""}">
+                    ${escapeHtml(message)}
+                </div>
+            `;
+        }
+
+
+        function formatWeight(value) {
+            if (
+                value === null ||
+                value === undefined ||
+                value === ""
+            ) {
+                return "—";
+            }
+
+            const number = Number(value);
+
+            if (!Number.isFinite(number)) {
+                return String(value);
+            }
+
+            return `${number.toLocaleString()} lb`;
+        }
+
+
+        function formatTonnage(value) {
+            if (
+                value === null ||
+                value === undefined ||
+                value === ""
+            ) {
+                return "—";
+            }
+
+            const number = Number(value);
+
+            if (!Number.isFinite(number)) {
+                return String(value);
+            }
+
+            return `${number.toLocaleString(
+                undefined,
+                {
+                    maximumFractionDigits: 1
+                }
+            )} tons`;
+        }
+
+
+        function detailItem(
+            label,
+            value,
+            fullWidth = false
+        ) {
+            const displayValue =
+                value === null ||
+                    value === undefined ||
+                    value === ""
+                    ? "—"
+                    : value;
+
+            return `
+                <div class="detail-item ${fullWidth ? "full-width" : ""
+                }">
+                    <div class="detail-label">
+                        ${escapeHtml(label)}
+                    </div>
+
+                    <div class="detail-value">
+                        ${escapeHtml(displayValue)}
+                    </div>
+                </div>
+            `;
+        }
+
+
+        function closeMoveConfirmation(
+            confirmed = false
+        ) {
+            moveConfirmationModal.classList.remove(
+                "visible"
+            );
+
+            if (
+                !waybillModal.classList.contains(
+                    "visible"
+                )
+            ) {
+                document.body.classList.remove(
+                    "modal-open"
+                );
+            }
+
+            const resolver =
+                moveConfirmationResolver;
+
+            moveConfirmationResolver = null;
+
+            if (resolver) {
+                resolver(confirmed);
+            }
+        }
+
+
+        function showMoveConfirmation(
+            moveType,
+            carName
+        ) {
+            const isPickup =
+                moveType === "PICKUP";
+
+            const actionName =
+                isPickup
+                    ? "Pickup"
+                    : "Set-out";
+
+            moveConfirmationTitle.textContent =
+                `Complete ${actionName}`;
+
+            moveConfirmationMessage.textContent =
+                isPickup
+                    ? "Confirm pickup for:"
+                    : "Confirm set-out for:";
+
+            moveConfirmationCar.textContent =
+                carName;
+
+            moveConfirmationComplete.textContent =
+                `Complete ${actionName}`;
+
+            moveConfirmationComplete.classList.remove(
+                "pickup",
+                "setout"
+            );
+
+            moveConfirmationComplete.classList.add(
+                isPickup
+                    ? "pickup"
+                    : "setout"
+            );
+
+            moveConfirmationModal.classList.add(
+                "visible"
+            );
+
+            document.body.classList.add(
+                "modal-open"
+            );
+
+            moveConfirmationCancel.focus();
+
+            return new Promise(
+                resolve => {
+                    moveConfirmationResolver =
+                        resolve;
+                }
+            );
+        }
+
+
+        function openWaybillModal(waybillId) {
+            waybillDialogTitle.textContent =
+                `Waybill #${waybillId}`;
+
+            waybillDialogContent.innerHTML = `
+                <div class="waybill-dialog-message">
+                    Loading Waybill...
+                </div>
+            `;
+
+            waybillModal.classList.add("visible");
+            document.body.classList.add("modal-open");
+
+            closeWaybillButton.focus();
+        }
+
+
+        function closeWaybillDetails() {
+            waybillModal.classList.remove("visible");
+            document.body.classList.remove("modal-open");
+        }
+
+
+        function renderWaybillDetails(waybill) {
+            const loadState =
+                waybill.load_state
+                    ? waybill.load_state
+                    : "Not specified";
+
+            waybillDialogTitle.textContent =
+                `Waybill #${waybill.id}`;
+
+            waybillDialogContent.innerHTML = `
+                <div class="waybill-car">
+                    ${escapeHtml(waybill.car_display || "—")}
+                </div>
+
+                <div class="waybill-car-type">
+                    ${escapeHtml(
+                waybill.car_type || "Car type not specified"
+            )}
+                </div>
+
+                <div class="detail-grid">
+                    ${detailItem(
+                "Status",
+                waybill.status
+            )}
+
+                    ${detailItem(
+                "Load",
+                loadState
+            )}
+
+                    ${detailItem(
+                "Commodity",
+                waybill.commodity
+            )}
+
+                    ${detailItem(
+                "Cargo Weight",
+                formatWeight(
+                    waybill.cargo_weight_lbs
+                )
+            )}
+
+                    ${detailItem(
+                "Gross Weight",
+                formatWeight(
+                    waybill.gross_weight_lbs
+                )
+            )}
+
+                    ${detailItem(
+                "Tonnage",
+                formatTonnage(
+                    waybill.tonnage
+                )
+            )}
+
+                    ${detailItem(
+                "Origin",
+                waybill.origin,
+                true
+            )}
+
+                    ${detailItem(
+                "Destination",
+                waybill.destination,
+                true
+            )}
+
+                    ${detailItem(
+                "Notes",
+                waybill.notes,
+                true
+            )}
+                </div>
+            `;
+        }
+
+
+        async function showWaybillDetails(waybillId) {
+            if (!waybillId) {
+                return;
+            }
+
+            openWaybillModal(waybillId);
+
+            try {
+                const response = await authenticatedFetch(
+                    `/api/waybills/${waybillId}`
+                );
+
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        throw new Error(
+                            "Waybill not found."
+                        );
+                    }
+
+                    throw new Error(
+                        "Unable to load Waybill details."
+                    );
+                }
+
+                const waybill = await response.json();
+
+                renderWaybillDetails(waybill);
+            } catch (error) {
+                if (
+                    waybillModal.classList.contains("visible")
+                ) {
+                    waybillDialogContent.innerHTML = `
+                        <div
+                            class="waybill-dialog-message error"
+                        >
+                            ${escapeHtml(error.message)}
+                        </div>
+                    `;
+                }
+            }
+        }
+
+
+        async function checkAuthentication() {
+            try {
+                const response = await fetch(
+                    "/api/auth/status",
+                    {
+                        credentials: "same-origin"
+                    }
+                );
+
+                if (!response.ok) {
+                    showPairingScreen();
+                    return;
+                }
+
+                const status = await response.json();
+
+                if (status.authenticated) {
+                    showCompanionScreen();
+                    await loadSessions();
+                } else {
+                    showPairingScreen();
+                }
+            } catch (error) {
+                showPairingScreen();
+                showPairingError(
+                    "Unable to contact the companion server."
+                );
+            }
+        }
+
+
+        async function pairDevice(code) {
+            clearPairingMessage();
+
+            pairButton.disabled = true;
+            pairButton.textContent = "Pairing...";
+
+            try {
+                const response = await fetch(
+                    "/api/pair",
+                    {
+                        method: "POST",
+                        credentials: "same-origin",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            code: code
+                        })
+                    }
+                );
+
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        throw new Error(
+                            "The pairing code is incorrect."
+                        );
+                    }
+
+                    throw new Error(
+                        "Unable to pair this device."
+                    );
+                }
+
+                showCompanionScreen();
+                await loadSessions();
+            } catch (error) {
+                showPairingError(error.message);
+                pairingCode.select();
+            } finally {
+                pairButton.disabled = false;
+                pairButton.textContent =
+                    "Pair This Device";
+            }
+        }
+
+
+        async function authenticatedFetch(
+            url,
+            options = {}
+        ) {
+            const response = await fetch(
+                url,
+                {
+                    ...options,
+                    credentials: "same-origin"
+                }
+            );
+
+            if (response.status === 401) {
+                showPairingScreen();
+
+                throw new Error(
+                    "This device must be paired again."
+                );
+            }
+
+            return response;
+        }
+
+
+        async function loadSessions() {
+            try {
+                const response = await authenticatedFetch(
+                    "/api/sessions"
+                );
+
+                if (!response.ok) {
+                    throw new Error(
+                        "Unable to load Operations Sessions."
+                    );
+                }
+
+                const sessions = await response.json();
+
+                sessionSelect.innerHTML = `
+                    <option value="">
+                        Select an Operations Session
+                    </option>
+                `;
+
+                for (const session of sessions) {
+                    const option =
+                        document.createElement("option");
+
+                    option.value = session.id;
+
+                    option.textContent =
+                        `${session.session_date} — ` +
+                        `${session.name} (${session.status})`;
+
+                    sessionSelect.appendChild(option);
+                }
+            } catch (error) {
+                if (
+                    companionScreen.style.display !== "none"
+                ) {
+                    sessionSelect.innerHTML = `
+                        <option value="">
+                            Unable to load sessions
+                        </option>
+                    `;
+
+                    showMessage(
+                        error.message,
+                        true
+                    );
+                }
+            }
+        }
+
+
+        async function loadTrains(sessionId) {
+            trains = [];
+
+            trainSummary.style.display = "none";
+            trainSummary.innerHTML = "";
+
+            trainSelect.disabled = true;
+
+            trainSelect.innerHTML = `
+                <option value="">
+                    Loading trains...
+                </option>
+            `;
+
+            showMessage("Select a Train.");
+
+            if (!sessionId) {
+                trainSelect.innerHTML = `
+                    <option value="">
+                        Select an Operations Session
+                    </option>
+                `;
+
+                return;
+            }
+
+            try {
+                const response = await authenticatedFetch(
+                    `/api/sessions/${sessionId}/trains`
+                );
+
+                if (!response.ok) {
+                    throw new Error(
+                        "Unable to load assigned trains."
+                    );
+                }
+
+                trains = await response.json();
+
+                trainSelect.innerHTML = `
+                    <option value="">
+                        Select a Train
+                    </option>
+                `;
+
+                for (const train of trains) {
+                    const option =
+                        document.createElement("option");
+
+                    option.value = train.train_id;
+
+                    option.textContent =
+                        `${train.symbol} — ${train.name}`;
+
+                    trainSelect.appendChild(option);
+                }
+
+                if (trains.length === 0) {
+                    trainSelect.innerHTML = `
+                        <option value="">
+                            No trains assigned
+                        </option>
+                    `;
+
+                    showMessage(
+                        "No trains are assigned to this session."
+                    );
+
+                    return;
+                }
+
+                trainSelect.disabled = false;
+            } catch (error) {
+                if (
+                    companionScreen.style.display !== "none"
+                ) {
+                    trainSelect.innerHTML = `
+                        <option value="">
+                            Unable to load trains
+                        </option>
+                    `;
+
+                    showMessage(
+                        error.message,
+                        true
+                    );
+                }
+            }
+        }
+
+
+        function showTrainSummary(train) {
+            if (!train) {
+                trainSummary.style.display = "none";
+                trainSummary.innerHTML = "";
+                return;
+            }
+
+            const route =
+                train.origin || train.destination
+                    ? `${escapeHtml(train.origin || "—")} → ` +
+                    `${escapeHtml(train.destination || "—")}`
+                    : "Route not specified";
+
+            trainSummary.innerHTML = `
+                <strong>
+                    ${escapeHtml(train.symbol)}
+                    ${escapeHtml(train.name)}
+                </strong>
+                <br>
+                ${escapeHtml(train.train_type)}
+                ${train.direction
+                    ? ` • ${escapeHtml(train.direction)}`
+                    : ""
+                }
+                <br>
+                ${route}
+            `;
+
+            trainSummary.style.display = "block";
+        }
+
+
+        async function loadMoves(
+            sessionId,
+            trainId
+        ) {
+            if (!sessionId || !trainId) {
+                showMessage(
+                    "Select an Operations Session and Train."
+                );
+                return;
+            }
+
+            showMessage("Loading train work...");
+
+            try {
+                const response = await authenticatedFetch(
+                    `/api/sessions/${sessionId}` +
+                    `/trains/${trainId}/moves`
+                );
+
+                if (!response.ok) {
+                    throw new Error(
+                        "Unable to load train work."
+                    );
+                }
+
+                const moves = await response.json();
+
+                renderMoves(moves);
+            } catch (error) {
+                if (
+                    companionScreen.style.display !== "none"
+                ) {
+                    showMessage(
+                        error.message,
+                        true
+                    );
+                }
+            }
+        }
+
+
+        function renderMoves(moves) {
+            movesContainer.innerHTML = "";
+
+            if (moves.length === 0) {
+                showMessage(
+                    "No generated switch-list work " +
+                    "was found for this train."
+                );
+                return;
+            }
+
+            for (const move of moves) {
+                const card =
+                    document.createElement("article");
+
+                const moveClass =
+                    move.move_type === "PICKUP"
+                        ? "pickup"
+                        : "setout";
+
+                card.className =
+                    `move-card ${moveClass}`;
+
+                const carName =
+                    `${move.reporting_mark} ${move.number}`.trim();
+
+                const lengthText =
+                    move.length
+                        ? ` • ${move.length} ft`
+                        : "";
+
+                const waybillControl =
+                    move.waybill_id
+                        ? `
+                            <button
+                                class="waybill-button"
+                                type="button"
+                                data-waybill-id="${move.waybill_id
+                        }"
+                            >
+                                Waybill #${escapeHtml(
+                            move.waybill_id
+                        )}
+                            </button>
+                        `
+                        : `
+                            <span>
+                                No Waybill
+                            </span>
+                        `;
+
+                const moveIsPending =
+                    move.move_status === "PENDING";
+
+                const completionLabel =
+                    move.move_type === "PICKUP"
+                        ? "Complete Pickup"
+                        : "Complete Set-out";
+
+                const completionControl =
+                    moveIsPending
+                        ? `
+                            <button
+                                class="complete-move-button ${moveClass}"
+                                type="button"
+                                data-car-move-id="${escapeHtml(
+                            move.car_move_id
+                        )}"
+                                data-move-type="${escapeHtml(
+                            move.move_type
+                        )}"
+                                data-car-name="${escapeHtml(
+                            carName
+                        )}"
+                            >
+                                ${completionLabel}
+                            </button>
+
+                            <div
+                                class="move-error"
+                                role="alert"
+                            ></div>
+                        `
+                        : "";
+
+                card.innerHTML = `
+                    <div class="move-header">
+                        <div class="move-type">
+                            ${escapeHtml(move.move_type)}
+                        </div>
+
+                        <div class="route-sequence">
+                            Stop ${escapeHtml(
+                    move.route_sequence ?? "—"
+                )}
+                        </div>
+                    </div>
+
+                    <div class="move-body">
+                        <div class="car">
+                            ${escapeHtml(carName)}
+                        </div>
+
+                        <div class="car-details">
+                            ${escapeHtml(move.car_type)}
+                            ${escapeHtml(lengthText)}
+                        </div>
+
+                        <div class="location-label">
+                            ${move.move_type === "PICKUP"
+                        ? "Pick up at"
+                        : "Set out at"
+                    }
+                        </div>
+
+                        <div class="location">
+                            ${escapeHtml(
+                        move.instruction_location
+                    )}
+                        </div>
+
+                        <div class="move-footer">
+                            ${waybillControl}
+
+                            <span>
+                                Waybill:
+                                ${escapeHtml(
+                        move.waybill_status
+                    )}
+                            </span>
+
+                            <span class="status-completed">
+                                Move:
+                                ${escapeHtml(
+                        move.move_status
+                    )}
+                            </span>
+                        </div>
+
+                        ${completionControl}
+                    </div>
+                `;
+
+                movesContainer.appendChild(card);
+            }
+        }
+
+
+        pairingCode.addEventListener(
+            "input",
+            () => {
+                pairingCode.value =
+                    pairingCode.value
+                        .replace(/\D/g, "")
+                        .slice(0, 6);
+            }
+        );
+
+
+        pairingForm.addEventListener(
+            "submit",
+            async event => {
+                event.preventDefault();
+
+                if (pairingCode.value.length !== 6) {
+                    showPairingError(
+                        "Enter the six-digit pairing code."
+                    );
+                    return;
+                }
+
+                await pairDevice(
+                    pairingCode.value
+                );
+            }
+        );
+
+
+        sessionSelect.addEventListener(
+            "change",
+            async () => {
+                closeWaybillDetails();
+
+                await loadTrains(
+                    sessionSelect.value
+                );
+            }
+        );
+
+
+        trainSelect.addEventListener(
+            "change",
+            async () => {
+                closeWaybillDetails();
+
+                const train = trains.find(
+                    item =>
+                        String(item.train_id) ===
+                        trainSelect.value
+                );
+
+                showTrainSummary(train);
+
+                await loadMoves(
+                    sessionSelect.value,
+                    trainSelect.value
+                );
+            }
+        );
+
+
+        movesContainer.addEventListener(
+            "click",
+            async event => {
+                const waybillButton =
+                    event.target.closest(
+                        ".waybill-button"
+                    );
+
+                if (waybillButton) {
+                    const waybillId =
+                        waybillButton.dataset.waybillId;
+
+                    await showWaybillDetails(
+                        waybillId
+                    );
+
+                    return;
+                }
+
+                const completeButton =
+                    event.target.closest(
+                        ".complete-move-button"
+                    );
+
+                if (!completeButton) {
+                    return;
+                }
+
+                const carMoveId =
+                    completeButton.dataset.carMoveId;
+
+                const moveType =
+                    completeButton.dataset.moveType;
+
+                const carName =
+                    completeButton.dataset.carName;
+
+                const confirmed =
+                await showMoveConfirmation(
+                    moveType,
+                    carName
+                );
+
+            if (!confirmed) {
+                return;
+            }
+
+            const card =
+                    completeButton.closest(
+                        ".move-card"
+                    );
+
+                const errorMessage =
+                    card.querySelector(
+                        ".move-error"
+                    );
+
+                errorMessage.style.display = "none";
+                errorMessage.textContent = "";
+
+                const originalText =
+                    completeButton.textContent;
+
+                completeButton.disabled = true;
+                completeButton.textContent =
+                    "Completing...";
+
+                try {
+                    const response =
+                        await authenticatedFetch(
+                            `/api/moves/${carMoveId}/complete`,
+                            {
+                                method: "POST"
+                            }
+                        );
+
+                    let data = {};
+
+                    try {
+                        data = await response.json();
+                    } catch (error) {
+                        data = {};
+                    }
+
+                    if (!response.ok) {
+                        throw new Error(
+                            data.detail ||
+                            data.message ||
+                            "Unable to complete this move."
+                        );
+                    }
+
+                    await loadMoves(
+                        sessionSelect.value,
+                        trainSelect.value
+                    );
+                } catch (error) {
+                    if (
+                        companionScreen.style.display !== "none"
+                    ) {
+                        errorMessage.textContent =
+                            error.message;
+
+                        errorMessage.style.display =
+                            "block";
+
+                        completeButton.disabled = false;
+                        completeButton.textContent =
+                            originalText;
+                    }
+                }
+            }
+        );
+
+
+        closeWaybillButton.addEventListener(
+            "click",
+            () => {
+                closeWaybillDetails();
+            }
+        );
+
+
+        moveConfirmationCancel.addEventListener(
+            "click",
+            () => {
+                closeMoveConfirmation(false);
+            }
+        );
+
+
+        moveConfirmationComplete.addEventListener(
+            "click",
+            () => {
+                closeMoveConfirmation(true);
+            }
+        );
+
+
+        moveConfirmationModal.addEventListener(
+            "click",
+            event => {
+                if (
+                    event.target ===
+                    moveConfirmationModal
+                ) {
+                    closeMoveConfirmation(false);
+                }
+            }
+        );
+
+
+        waybillModal.addEventListener(
+            "click",
+            event => {
+                if (event.target === waybillModal) {
+                    closeWaybillDetails();
+                }
+            }
+        );
+
+
+        document.addEventListener(
+            "keydown",
+            event => {
+                if (
+                    event.key === "Escape" &&
+                    moveConfirmationModal.classList.contains(
+                        "visible"
+                    )
+                ) {
+                    closeMoveConfirmation(false);
+                    return;
+                }
+
+                if (
+                    event.key === "Escape" &&
+                    waybillModal.classList.contains("visible")
+                ) {
+                    closeWaybillDetails();
+                }
+            }
+        );
+
+
+        checkAuthentication();
+    </script>
+</body>
+
+</html>

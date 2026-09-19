@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from modelrailroadops.database.database import SessionLocal
 
@@ -927,6 +927,23 @@ class SwitchListMoveService:
         session = SessionLocal()
 
         try:
+
+            #
+            # Acquire SQLite's write reservation before reading the
+            # CarMove. This serializes competing move-completion
+            # transactions against the same railroad database.
+            #
+            # A second writer waits for this transaction to finish.
+            # After it acquires the lock, _validate_car_move() reads
+            # the newly committed CarMove status and rejects an
+            # already-completed instruction.
+            #
+
+            session.execute(
+                text("BEGIN IMMEDIATE")
+            )
+
+
 
             (
                 valid,

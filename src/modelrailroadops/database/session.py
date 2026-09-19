@@ -1,9 +1,4 @@
-from sqlalchemy.orm import sessionmaker
+"""Compatibility import for the shared application session factory."""
+from modelrailroadops.database.database import SessionLocal
 
-from modelrailroadops.database.engine import engine
-
-SessionLocal = sessionmaker(
-    bind=engine,
-    autoflush=False,
-    autocommit=False,
-)
+__all__ = ["SessionLocal"]

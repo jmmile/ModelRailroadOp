@@ -338,11 +338,13 @@ class MainWindow(QMainWindow):
             self,
             "Backup Database",
             str(default_path),
-            "Model Railroad Backup (*.db)",
+            "Complete Layout Backup (*.zip)",
         )
 
         if not filepath:
             return
+        if not filepath.lower().endswith(".zip"):
+            filepath += ".zip"
 
         created, result = DatabaseBackupService.create_backup(filepath)
         if not created:
@@ -352,7 +354,7 @@ class MainWindow(QMainWindow):
         QMessageBox.information(
             self,
             "Backup Complete",
-            f"The database was backed up to:\n\n{result}",
+            f"The database and car images were backed up to:\n\n{result}",
         )
 
     def restore_database(self):
@@ -360,7 +362,7 @@ class MainWindow(QMainWindow):
             self,
             "Restore Database",
             str(DatabaseBackupService.default_backup_path().parent),
-            "Model Railroad Backup (*.db)",
+            "Layout and Database Backups (*.zip *.db)",
         )
 
         if not filepath:
@@ -370,7 +372,8 @@ class MainWindow(QMainWindow):
             self,
             "Restore Database",
             (
-                "Replace the current database with this backup?\n\n"
+                "Restore this backup? ZIP backups replace the database and car images. "
+                "Older DB backups replace only the database.\n\n"
                 f"{filepath}\n\n"
                 "A safety backup of the current database will be created first."
             ),

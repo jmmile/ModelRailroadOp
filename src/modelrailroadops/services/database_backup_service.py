@@ -1,4 +1,8 @@
 import sqlite3
+import os
+import shutil
+import tempfile
+import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -7,6 +11,140 @@ from modelrailroadops.database import database
 
 class DatabaseBackupService:
     """Create and restore validated snapshots of the application database."""
+
+    @staticmethod
+    def create_layout_backup(destination):
+        """Publish a complete archive only after its database and ZIP validate."""
+        destination = Path(destination)
+        try:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.TemporaryDirectory(dir=destination.parent) as temporary:
+                staging = Path(temporary)
+                snapshot = staging / "railroad.db"
+                DatabaseBackupService._copy_database(database.DATABASE_FILE, snapshot)
+                valid, message = DatabaseBackupService._validate_database(snapshot)
+                if not valid:
+                    return False, message
+                archive = staging / "layout.zip"
+                images = database.DATABASE_FILE.parent / "Car_Images"
+                with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as output:
+                    output.write(snapshot, "railroad.db")
+                    if images.is_dir():
+                        for picture in images.rglob("*"):
+                            if picture.is_file() and not picture.is_symlink():
+                                output.write(
+                                    picture,
+                                    "Car_Images/"
+                                    + picture.relative_to(images).as_posix(),
+                                )
+                with zipfile.ZipFile(archive) as check:
+                    if check.testzip() is not None:
+                        return False, "Backup archive verification failed."
+                os.replace(archive, destination)
+            return True, destination
+        except (OSError, sqlite3.DatabaseError, zipfile.BadZipFile) as exc:
+            return False, f"Layout backup failed: {exc}"
+
+    @staticmethod
+    def restore_layout_backup(source):
+        """Stage and validate an archive before touching live data or images."""
+        root = database.DATABASE_FILE.parent
+        safety = (
+            root
+            / "backups"
+            / (
+                "railroad-before-restore-"
+                + datetime.now(UTC).strftime("%Y%m%d-%H%M%S-%f")
+                + ".zip"
+            )
+        )
+        try:
+            with tempfile.TemporaryDirectory(dir=root) as temporary:
+                staging = Path(temporary)
+                incoming = staging / "incoming"
+                incoming.mkdir()
+                (incoming / "Car_Images").mkdir()
+                with zipfile.ZipFile(source) as archive:
+                    names = set()
+                    for member in archive.infolist():
+                        name = member.filename
+                        target = (incoming / name).resolve()
+                        if (
+                            "\\" in name
+                            or ":" in name
+                            or target == incoming.resolve()
+                            or incoming.resolve() not in target.parents
+                            or (
+                                name != "railroad.db"
+                                and not name.startswith("Car_Images/")
+                            )
+                            or name.casefold() in names
+                        ):
+                            return (
+                                False,
+                                "The backup contains unexpected or unsafe file names.",
+                            )
+                        names.add(name.casefold())
+                        if member.is_dir():
+                            target.mkdir(parents=True, exist_ok=True)
+                        else:
+                            target.parent.mkdir(parents=True, exist_ok=True)
+                            with (
+                                archive.open(member) as source_file,
+                                target.open("wb") as output,
+                            ):
+                                shutil.copyfileobj(source_file, output)
+                valid, message = DatabaseBackupService._validate_database(
+                    incoming / "railroad.db"
+                )
+                if not valid:
+                    return False, message
+                saved, message = DatabaseBackupService.create_layout_backup(safety)
+                if not saved:
+                    return False, f"Restore cancelled; safety backup failed: {message}"
+                previous_db = staging / "previous.db"
+                DatabaseBackupService._copy_database(
+                    database.DATABASE_FILE, previous_db
+                )
+                images = root / "Car_Images"
+                old_images = staging / "previous-images"
+                moved_old_images = False
+                installed_images = False
+                try:
+                    database.engine.dispose()
+                    DatabaseBackupService._copy_database(
+                        incoming / "railroad.db", database.DATABASE_FILE
+                    )
+                    database.initialize_database()
+                    if images.exists():
+                        images.rename(old_images)
+                        moved_old_images = True
+                    (incoming / "Car_Images").rename(images)
+                    installed_images = True
+                except Exception as exc:  # noqa: BLE001 - recover migration and filesystem failures
+                    try:
+                        database.engine.dispose()
+                        DatabaseBackupService._copy_database(
+                            previous_db, database.DATABASE_FILE
+                        )
+                        if installed_images:
+                            images.rename(staging / "failed-images")
+                        if moved_old_images:
+                            old_images.rename(images)
+                    except Exception as recovery_exc:  # noqa: BLE001
+                        return (
+                            False,
+                            f"Restore failed: {exc}. Recovery failed: {recovery_exc}. Recover using {safety}.",
+                        )
+                    return False, f"Restore failed; previous layout restored: {exc}"
+                return True, safety
+        except (
+            OSError,
+            sqlite3.DatabaseError,
+            zipfile.BadZipFile,
+            RuntimeError,
+        ) as exc:
+            return False, f"Layout restore failed: {exc}"
 
     @staticmethod
     def automatic_backup(session):
@@ -31,11 +169,11 @@ class DatabaseBackupService:
 
     @staticmethod
     def default_backup_path():
-        timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+        timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S-%f")
         return (
             database.DATABASE_FILE.parent
             / "backups"
-            / f"railroad-backup-{timestamp}.db"
+            / f"railroad-backup-{timestamp}.zip"
         )
 
     @staticmethod
@@ -47,13 +185,11 @@ class DatabaseBackupService:
 
         try:
             connection = sqlite3.connect(
-                f"file:{path.resolve().as_posix()}?mode=ro",
+                path.resolve().as_uri() + "?mode=ro",
                 uri=True,
             )
             try:
-                integrity = connection.execute(
-                    "PRAGMA integrity_check"
-                ).fetchone()
+                integrity = connection.execute("PRAGMA integrity_check").fetchone()
                 tables = {
                     row[0]
                     for row in connection.execute(
@@ -82,17 +218,23 @@ class DatabaseBackupService:
         destination = Path(destination)
         destination.parent.mkdir(parents=True, exist_ok=True)
 
-        source_connection = sqlite3.connect(str(source))
-        destination_connection = sqlite3.connect(str(destination))
+        source_connection = sqlite3.connect(
+            source.resolve().as_uri() + "?mode=ro", uri=True
+        )
         try:
-            source_connection.backup(destination_connection)
+            destination_connection = sqlite3.connect(str(destination))
+            try:
+                source_connection.backup(destination_connection)
+            finally:
+                destination_connection.close()
         finally:
-            destination_connection.close()
             source_connection.close()
 
     @staticmethod
     def create_backup(destination):
         destination = Path(destination)
+        if destination.suffix.casefold() == ".zip":
+            return DatabaseBackupService.create_layout_backup(destination)
         if destination.suffix.casefold() != ".db":
             destination = destination.with_suffix(".db")
 
@@ -100,16 +242,14 @@ class DatabaseBackupService:
             if destination.resolve() == database.DATABASE_FILE.resolve():
                 return False, "Choose a file other than the active database."
 
-            DatabaseBackupService._copy_database(
-                database.DATABASE_FILE,
-                destination,
-            )
-            valid, message = DatabaseBackupService._validate_database(
-                destination
-            )
-            if not valid:
-                destination.unlink(missing_ok=True)
-                return False, message
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.TemporaryDirectory(dir=destination.parent) as temporary:
+                snapshot = Path(temporary) / "snapshot.db"
+                DatabaseBackupService._copy_database(database.DATABASE_FILE, snapshot)
+                valid, message = DatabaseBackupService._validate_database(snapshot)
+                if not valid:
+                    return False, message
+                os.replace(snapshot, destination)
         except (OSError, sqlite3.DatabaseError) as exc:
             return False, f"The backup could not be created: {exc}"
 
@@ -118,6 +258,8 @@ class DatabaseBackupService:
     @staticmethod
     def restore_backup(source):
         source = Path(source)
+        if source.suffix.casefold() == ".zip":
+            return DatabaseBackupService.restore_layout_backup(source)
         valid, message = DatabaseBackupService._validate_database(source)
         if not valid:
             return False, message
@@ -125,18 +267,17 @@ class DatabaseBackupService:
         if source.resolve() == database.DATABASE_FILE.resolve():
             return False, "The selected file is already the active database."
 
-        timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+        timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S-%f")
         safety_backup = (
             database.DATABASE_FILE.parent
             / "backups"
             / f"railroad-before-restore-{timestamp}.db"
         )
 
+        backed_up, message = DatabaseBackupService.create_backup(safety_backup)
+        if not backed_up:
+            return False, f"Restore cancelled; safety backup failed: {message}"
         try:
-            DatabaseBackupService._copy_database(
-                database.DATABASE_FILE,
-                safety_backup,
-            )
             database.engine.dispose()
             DatabaseBackupService._copy_database(
                 source,
@@ -150,7 +291,6 @@ class DatabaseBackupService:
                     safety_backup,
                     database.DATABASE_FILE,
                 )
-                database.initialize_database()
             except Exception as recovery_exc:  # noqa: BLE001
                 return False, (
                     f"The database restore failed: {exc}. The automatic "

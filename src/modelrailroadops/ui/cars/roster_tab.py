@@ -484,10 +484,7 @@ class RosterTab(QWidget):
 
     def canonical_picture_path(self, car):
 
-        image_directory = (
-            WaybillFormRenderer._project_root()
-            / WaybillFormRenderer.IMAGE_DIRECTORY
-        )
+        image_directory = WaybillFormRenderer.image_directory()
 
         reporting_mark = self.picture_filename_part(
             car.reporting_mark
@@ -504,10 +501,7 @@ class RosterTab(QWidget):
 
     def picture_paths(self, car):
 
-        image_directory = (
-            WaybillFormRenderer._project_root()
-            / WaybillFormRenderer.IMAGE_DIRECTORY
-        )
+        image_directory = WaybillFormRenderer.image_directory()
 
         if not image_directory.is_dir():
             return []
