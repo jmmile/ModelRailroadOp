@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from modelrailroadops.database import database
+from modelrailroadops.services.image_storage import CAR_IMAGES, MANAGED_IMAGE_FOLDERS
 
 
 class DatabaseBackupService:
@@ -26,17 +27,20 @@ class DatabaseBackupService:
                 if not valid:
                     return False, message
                 archive = staging / "layout.zip"
-                images = database.DATABASE_FILE.parent / "Car_Images"
                 with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as output:
                     output.write(snapshot, "railroad.db")
-                    if images.is_dir():
-                        for picture in images.rglob("*"):
-                            if picture.is_file() and not picture.is_symlink():
-                                output.write(
-                                    picture,
-                                    "Car_Images/"
-                                    + picture.relative_to(images).as_posix(),
-                                )
+                    for folder in MANAGED_IMAGE_FOLDERS:
+                        images = database.DATABASE_FILE.parent / folder
+                        if images.is_symlink() or images.is_junction():
+                            raise OSError(f"Image folder must not be a link: {images}")
+                        # Explicit empty entries distinguish new snapshots from old backups.
+                        output.writestr(folder + "/", b"")
+                        if images.is_dir():
+                            for picture in images.rglob("*"):
+                                if picture.is_symlink() or picture.is_junction():
+                                    raise OSError(f"Image path must not be a link: {picture}")
+                                if picture.is_file():
+                                    output.write(picture, folder + "/" + picture.relative_to(images).as_posix())
                 with zipfile.ZipFile(archive) as check:
                     if check.testzip() is not None:
                         return False, "Backup archive verification failed."
@@ -63,7 +67,10 @@ class DatabaseBackupService:
                 staging = Path(temporary)
                 incoming = staging / "incoming"
                 incoming.mkdir()
-                (incoming / "Car_Images").mkdir()
+                # Old archives only knew car images. Preserve newer collections
+                # when those folders are absent rather than silently deleting them.
+                restore_folders = {CAR_IMAGES}
+                (incoming / CAR_IMAGES).mkdir()
                 with zipfile.ZipFile(source) as archive:
                     names = set()
                     for member in archive.infolist():
@@ -72,11 +79,12 @@ class DatabaseBackupService:
                         if (
                             "\\" in name
                             or ":" in name
+                            or any(part in (".", "..") for part in name.split("/"))
                             or target == incoming.resolve()
                             or incoming.resolve() not in target.parents
                             or (
                                 name != "railroad.db"
-                                and not name.startswith("Car_Images/")
+                                and not any(name.startswith(folder + "/") for folder in MANAGED_IMAGE_FOLDERS)
                             )
                             or name.casefold() in names
                         ):
@@ -85,6 +93,9 @@ class DatabaseBackupService:
                                 "The backup contains unexpected or unsafe file names.",
                             )
                         names.add(name.casefold())
+                        folder = name.split("/", 1)[0]
+                        if folder in MANAGED_IMAGE_FOLDERS:
+                            restore_folders.add(folder)
                         if member.is_dir():
                             target.mkdir(parents=True, exist_ok=True)
                         else:
@@ -106,31 +117,33 @@ class DatabaseBackupService:
                 DatabaseBackupService._copy_database(
                     database.DATABASE_FILE, previous_db
                 )
-                images = root / "Car_Images"
-                old_images = staging / "previous-images"
-                moved_old_images = False
-                installed_images = False
+                moved_old_images = []
+                installed_images = []
                 try:
                     database.engine.dispose()
                     DatabaseBackupService._copy_database(
                         incoming / "railroad.db", database.DATABASE_FILE
                     )
                     database.initialize_database()
-                    if images.exists():
-                        images.rename(old_images)
-                        moved_old_images = True
-                    (incoming / "Car_Images").rename(images)
-                    installed_images = True
+                    for folder in MANAGED_IMAGE_FOLDERS:
+                        if folder not in restore_folders:
+                            continue
+                        images = root / folder
+                        if images.exists():
+                            images.rename(staging / ("previous-" + folder))
+                            moved_old_images.append(folder)
+                        (incoming / folder).rename(images)
+                        installed_images.append(folder)
                 except Exception as exc:  # noqa: BLE001 - recover migration and filesystem failures
                     try:
                         database.engine.dispose()
                         DatabaseBackupService._copy_database(
                             previous_db, database.DATABASE_FILE
                         )
-                        if installed_images:
-                            images.rename(staging / "failed-images")
-                        if moved_old_images:
-                            old_images.rename(images)
+                        for folder in reversed(installed_images):
+                            (root / folder).rename(staging / ("failed-" + folder))
+                        for folder in reversed(moved_old_images):
+                            (staging / ("previous-" + folder)).rename(root / folder)
                     except Exception as recovery_exc:  # noqa: BLE001
                         return (
                             False,

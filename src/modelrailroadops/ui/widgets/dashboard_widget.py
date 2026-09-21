@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from modelrailroadops.services.dashboard_service import DashboardService
+from modelrailroadops.ui.widgets.companion_panel import CompanionPanel
 
 
 class DashboardWidget(QWidget):
@@ -35,6 +36,8 @@ class DashboardWidget(QWidget):
         self.updated_label = QLabel()
         self.updated_label.setStyleSheet("color: #555;")
         layout.addWidget(self.updated_label)
+        self.companion_panel = CompanionPanel(self)
+        layout.addWidget(self.companion_panel)
 
         grid = QGridLayout()
         layout.addLayout(grid)
@@ -114,7 +117,7 @@ class DashboardWidget(QWidget):
         backups.addWidget(self.restore_button)
         backups.addWidget(
             QLabel(
-                "Manual backups include database and car images.\nAutomatic session backups: database only; latest 10 retained."
+                "Manual ZIP backups include the database and all managed pictures.\nAutomatic session backups: database only; latest 10 retained."
             )
         )
         layout.addLayout(backups)

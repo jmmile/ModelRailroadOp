@@ -1,6 +1,8 @@
 """Tests for visible database-override startup warnings."""
 
 import uvicorn
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import modelrailroadops.__main__ as application_module
 from modelrailroadops.web import server
@@ -19,6 +21,7 @@ def test_desktop_warns_when_database_override_is_active(
     database_file = override_directory / "railroad.db"
 
     warning_calls = []
+    companion_start = Mock()
 
     class FakeApplication:
         def __init__(self, arguments):
@@ -28,6 +31,10 @@ def test_desktop_warns_when_database_override_is_active(
             return 0
 
     class FakeMainWindow:
+        dashboard_widget = SimpleNamespace(
+            companion_panel=SimpleNamespace(start_automatically=companion_start)
+        )
+
         def show(self):
             return None
 
@@ -91,6 +98,7 @@ def test_desktop_warns_when_database_override_is_active(
     result = application_module.Application().run()
 
     assert result == 0
+    companion_start.assert_called_once_with()
     assert len(warning_calls) == 1
 
     _parent, title, message = warning_calls[0]

@@ -1,4 +1,6 @@
-from PySide6.QtCore import Qt
+from pathlib import Path
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QFileDialog,
     QMainWindow,
@@ -74,6 +76,9 @@ class MainWindow(QMainWindow):
     def __init__(self):
 
         super().__init__()
+        self.setWindowIcon(QIcon(str(
+            Path(__file__).resolve().parents[1] / "resources" / "application.ico"
+        )))
 
         self.setWindowTitle(
             "Model Railroad Operations"
@@ -319,6 +324,15 @@ class MainWindow(QMainWindow):
             self.tabs
         )
 
+    def closeEvent(self, event):
+        controller = self.dashboard_widget.companion_panel.controller
+        if controller.busy:
+            controller.stop()
+            event.ignore()
+            QTimer.singleShot(200, self.close)
+            return
+        super().closeEvent(event)
+
     def create_file_menu(self):
         self.file_menu = self.menuBar().addMenu("File")
 
@@ -354,10 +368,17 @@ class MainWindow(QMainWindow):
         QMessageBox.information(
             self,
             "Backup Complete",
-            f"The database and car images were backed up to:\n\n{result}",
+            f"The database and managed pictures (cars, locomotives, and passenger equipment) were backed up to:\n\n{result}",
         )
 
     def restore_database(self):
+        if self.dashboard_widget.companion_panel.controller.busy:
+            QMessageBox.warning(
+                self, "Stop Companion First",
+                "Stop the companion on the Dashboard before restoring a backup. "
+                "Also close any separately running companion server.",
+            )
+            return
         filepath, _ = QFileDialog.getOpenFileName(
             self,
             "Restore Database",
@@ -372,10 +393,11 @@ class MainWindow(QMainWindow):
             self,
             "Restore Database",
             (
-                "Restore this backup? ZIP backups replace the database and car images. "
+                "Restore this backup? ZIP backups replace the database and included picture collections. "
+                "Older backups without locomotive or passenger pictures leave those collections unchanged. "
                 "Older DB backups replace only the database.\n\n"
                 f"{filepath}\n\n"
-                "A safety backup of the current database will be created first."
+                "A safety backup will be created first (including all managed pictures for ZIP restores)."
             ),
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,

@@ -1,9 +1,14 @@
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QPixmap
+from sqlalchemy.exc import SQLAlchemyError
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QFormLayout,
+    QFileDialog,
     QHBoxLayout,
     QLineEdit,
+    QLabel,
     QMessageBox,
     QPushButton,
     QTextEdit,
@@ -13,6 +18,7 @@ from PySide6.QtWidgets import (
 from modelrailroadops.services.locomotive_service import (
     LocomotiveService,
 )
+from modelrailroadops.services import locomotive_image_service as images
 
 
 class AddLocomotiveDialog(QDialog):
@@ -29,6 +35,8 @@ class AddLocomotiveDialog(QDialog):
         super().__init__(parent)
 
         self.locomotive = locomotive
+        self.picture = None
+        self.remove_picture = False
 
         self.setWindowTitle(
             "Add Locomotive"
@@ -172,6 +180,28 @@ class AddLocomotiveDialog(QDialog):
         layout.addLayout(
             form
         )
+
+        self.picture_preview = QLabel("No Image Available")
+        self.picture_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.picture_preview.setFixedSize(400, 150)
+        layout.addWidget(self.picture_preview, alignment=Qt.AlignmentFlag.AlignHCenter)
+        picture_buttons = QHBoxLayout()
+        self.picture_button = QPushButton("Add Picture")
+        self.remove_picture_button = QPushButton("Remove Picture")
+        self.remove_picture_button.setEnabled(False)
+        picture_buttons.addWidget(self.picture_button)
+        picture_buttons.addWidget(self.remove_picture_button)
+        layout.addLayout(picture_buttons)
+        self.picture_button.clicked.connect(self.choose_picture)
+        self.remove_picture_button.clicked.connect(self.clear_picture)
+        if locomotive:
+            try:
+                existing = images.find_image(locomotive.reporting_mark, locomotive.number)
+                if existing:
+                    self.show_picture(QPixmap(str(existing)))
+            except (OSError, ValueError) as error:
+                self.picture_preview.setText(str(error))
+                self.picture_preview.setWordWrap(True)
 
         buttons = QHBoxLayout()
 
@@ -320,7 +350,52 @@ class AddLocomotiveDialog(QDialog):
 
         return True, value
 
+    def show_picture(self, pixmap):
+        self.picture_preview.clear()
+        if pixmap.isNull():
+            self.picture_preview.setText("Picture cannot be displayed")
+        else:
+            self.picture_preview.setPixmap(pixmap.scaled(
+                self.picture_preview.size(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            ))
+        self.picture_button.setText("Change Picture")
+        self.remove_picture_button.setEnabled(True)
+
+    def choose_picture(self):
+        filename, _ = QFileDialog.getOpenFileName(
+            self, "Select Locomotive Picture", "",
+            "Pictures (*.png *.jpg *.jpeg);;PNG (*.png);;JPEG (*.jpg *.jpeg)",
+        )
+        if not filename:
+            return
+        try:
+            picture = images.import_picture(filename)
+        except (OSError, ValueError) as error:
+            QMessageBox.warning(self, "Picture Error", str(error))
+            return
+        self.picture = picture
+        self.remove_picture = False
+        pixmap = QPixmap()
+        pixmap.loadFromData(picture, "PNG")
+        self.show_picture(pixmap)
+
+    def clear_picture(self):
+        self.picture = None
+        self.remove_picture = True
+        self.picture_preview.clear()
+        self.picture_preview.setText("No Image Available")
+        self.picture_button.setText("Add Picture")
+        self.remove_picture_button.setEnabled(False)
+
     def save(self):
+        try:
+            self._save()
+        except (OSError, ValueError, SQLAlchemyError) as error:
+            QMessageBox.warning(self, "Unable to Save Locomotive", str(error))
+
+    def _save(self):
 
         reporting_mark = (
             self.reporting_mark.text()
@@ -412,6 +487,8 @@ class AddLocomotiveDialog(QDialog):
 
             updated_locomotive = LocomotiveService.update(
                 locomotive_id=self.locomotive.id,
+                picture=self.picture,
+                remove_picture=self.remove_picture,
                 reporting_mark=reporting_mark,
                 number=number,
                 owner=owner,
@@ -442,6 +519,8 @@ class AddLocomotiveDialog(QDialog):
         else:
 
             locomotive = LocomotiveService.add(
+                picture=self.picture,
+                remove_picture=self.remove_picture,
                 reporting_mark=reporting_mark,
                 number=number,
                 owner=owner,

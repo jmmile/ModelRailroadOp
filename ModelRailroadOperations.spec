@@ -1,13 +1,18 @@
 from pathlib import Path
 import PySide6
+import sys
+from PyInstaller.utils.hooks import collect_submodules
 
 root = Path(SPECPATH)
+sys.path.insert(0, str(root / "packaging"))
+from release_audit import audit_inputs
 a = Analysis(
     [str(root / "packaging" / "launcher.py")],
     pathex=[str(root / "src"), str(root / "packaging")],
     binaries=[],
-    datas=[],
-    hiddenimports=["sqlalchemy.dialects.sqlite"],
+    datas=[(str(root / "src/modelrailroadops/web/static/index.html"), "modelrailroadops/web/static"),
+           (str(root / "src/modelrailroadops/resources/application.ico"), "modelrailroadops/resources")],
+    hiddenimports=["sqlalchemy.dialects.sqlite", "modelrailroadops.web.server"] + collect_submodules("uvicorn"),
     excludes=["pytest", "ruff", "black", "alembic", "tkinter"],
     noarchive=False,
 )
@@ -21,11 +26,20 @@ for dll in ("vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll", "msvcp140_
     a.binaries = [entry for entry in a.binaries if entry[0].casefold() != dll]
     a.binaries.append((dll, str(qt_directory / dll), "BINARY"))
 pyz = PYZ(a.pure)
+audit_inputs(a.datas + a.binaries + a.pure + a.scripts, root)
 exe = EXE(
     pyz, a.scripts, [], exclude_binaries=True,
     name="Model Railroad Operations",
+    icon=str(root / "src/modelrailroadops/resources/application.ico"),
     console=False, debug=False, strip=False, upx=False,
     version=str(root / "packaging" / "version_info.txt"),
 )
-coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False,
+companion = EXE(
+    pyz, a.scripts, [], exclude_binaries=True,
+    name="Model Railroad Companion",
+    icon=str(root / "src/modelrailroadops/resources/application.ico"),
+    console=True, debug=False, strip=False, upx=False,
+    version=str(root / "packaging" / "version_info.txt"),
+)
+coll = COLLECT(exe, companion, a.binaries, a.datas, strip=False, upx=False,
                name="Model Railroad Operations")

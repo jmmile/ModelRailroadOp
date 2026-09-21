@@ -1,3 +1,7 @@
 # Runtime only; development tools remain in requirements.txt.
 PySide6==6.11.1
 SQLAlchemy==2.0.51
+fastapi==0.141.1
+starlette==1.6.0
+pydantic==2.13.5
+uvicorn==0.53.0

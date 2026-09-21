@@ -47,6 +47,7 @@ class Application:
 
             window = MainWindow()
             window.show()
+            window.dashboard_widget.companion_panel.start_automatically()
 
             if data_directory_override() is not None:
                 QMessageBox.warning(

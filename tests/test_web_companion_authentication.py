@@ -3,6 +3,8 @@
 from fastapi.testclient import TestClient
 
 from modelrailroadops.web import server
+from modelrailroadops.models.waybill import Waybill
+from test_switch_list_output import seed_switch_list
 
 
 def pair_client(client):
@@ -117,7 +119,7 @@ def test_correct_pairing_code_authenticates_browser():
     }
 
 
-def test_authenticated_browser_can_request_sessions():
+def test_authenticated_browser_can_request_sessions(test_database):
     """A paired browser can reach the protected sessions endpoint."""
 
     with TestClient(server.app) as client:
@@ -160,7 +162,7 @@ def test_waybill_details_reject_unpaired_browser():
     )
 
 
-def test_waybill_details_return_not_found():
+def test_waybill_details_return_not_found(test_database):
     """A paired browser receives 404 for an unknown Waybill."""
 
     with TestClient(server.app) as client:
@@ -176,21 +178,26 @@ def test_waybill_details_return_not_found():
     )
 
 
-def test_waybill_details_return_operator_information():
+def test_waybill_details_return_operator_information(test_database):
     """A paired browser can retrieve read-only Waybill details."""
+
+    records = seed_switch_list(test_database)
+    with test_database.SessionLocal() as session:
+        session.get(Waybill, records["waybill_id"]).status = "COMPLETED"
+        session.commit()
 
     with TestClient(server.app) as client:
         pair_client(client)
 
         response = client.get(
-            "/api/waybills/26"
+            f"/api/waybills/{records['waybill_id']}"
         )
 
     assert response.status_code == 200
 
     data = response.json()
 
-    assert data["id"] == 26
+    assert data["id"] == records["waybill_id"]
     assert data["car_display"] == "GN 33103"
     assert data["status"] == "COMPLETED"
 

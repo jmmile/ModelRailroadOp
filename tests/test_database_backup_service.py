@@ -1,5 +1,9 @@
 import sqlite3
+import zipfile
+from pathlib import Path
 from types import SimpleNamespace
+
+import pytest
 
 from sqlalchemy import create_engine
 
@@ -7,6 +11,104 @@ from modelrailroadops.database import database
 from modelrailroadops.services.database_backup_service import (
     DatabaseBackupService,
 )
+from modelrailroadops.services.image_storage import MANAGED_IMAGE_FOLDERS
+
+
+@pytest.fixture
+def layout(tmp_path, monkeypatch):
+    active = tmp_path / "railroad.db"
+    _create_application_database(active, "CURRENT")
+    monkeypatch.setattr(database, "DATABASE_FILE", active)
+    monkeypatch.setattr(database.engine, "dispose", lambda: None)
+    monkeypatch.setattr(database, "initialize_database", lambda: None)
+    for folder in MANAGED_IMAGE_FOLDERS:
+        (tmp_path / folder).mkdir()
+        (tmp_path / folder / "picture.png").write_bytes(folder.encode())
+    return tmp_path
+
+
+def test_layout_backup_restores_all_picture_collections(layout):
+    archive = layout / "layout.zip"
+    saved, result = DatabaseBackupService.create_backup(archive)
+    assert saved, result
+    with zipfile.ZipFile(archive) as contents:
+        for folder in MANAGED_IMAGE_FOLDERS:
+            assert contents.read(folder + "/picture.png") == folder.encode()
+            (layout / folder / "picture.png").write_bytes(b"changed")
+    restored, safety = DatabaseBackupService.restore_backup(archive)
+    assert restored, safety
+    for folder in MANAGED_IMAGE_FOLDERS:
+        assert (layout / folder / "picture.png").read_bytes() == folder.encode()
+    with zipfile.ZipFile(safety) as contents:
+        for folder in MANAGED_IMAGE_FOLDERS:
+            assert contents.read(folder + "/picture.png") == b"changed"
+
+
+def test_legacy_zip_preserves_new_picture_collections(layout):
+    archive = layout / "old.zip"
+    with zipfile.ZipFile(archive, "w") as contents:
+        contents.write(layout / "railroad.db", "railroad.db")
+        contents.writestr("Car_Images/old.jpg", b"old-car")
+    restored, result = DatabaseBackupService.restore_backup(archive)
+    assert restored, result
+    assert (layout / "Car_Images" / "old.jpg").read_bytes() == b"old-car"
+    assert not (layout / "Car_Images" / "picture.png").exists()
+    for folder in MANAGED_IMAGE_FOLDERS[1:]:
+        assert (layout / folder / "picture.png").read_bytes() == folder.encode()
+
+
+def test_empty_collection_round_trip(layout):
+    picture = layout / "Locomotive_Images" / "picture.png"
+    picture.unlink()
+    saved, result = DatabaseBackupService.create_backup(layout / "empty.zip")
+    assert saved, result
+    picture.write_bytes(b"added later")
+    restored, safety = DatabaseBackupService.restore_backup(layout / "empty.zip")
+    assert restored, safety
+    assert not picture.exists()
+    with zipfile.ZipFile(safety) as contents:
+        assert contents.read("Locomotive_Images/picture.png") == b"added later"
+
+
+def test_picture_restore_failure_rolls_back_all_collections(layout, monkeypatch):
+    archive = layout / "layout.zip"
+    assert DatabaseBackupService.create_backup(archive)[0]
+    for folder in MANAGED_IMAGE_FOLDERS:
+        (layout / folder / "picture.png").write_bytes(b"current")
+    original_rename = Path.rename
+
+    def fail_install(path, target):
+        if path.parent.name == "incoming" and path.name == "Locomotive_Images":
+            raise OSError("Simulated image restore failure")
+        return original_rename(path, target)
+
+    monkeypatch.setattr(Path, "rename", fail_install)
+    restored, message = DatabaseBackupService.restore_backup(archive)
+    assert not restored
+    assert "previous layout restored" in message
+    for folder in MANAGED_IMAGE_FOLDERS:
+        assert (layout / folder / "picture.png").read_bytes() == b"current"
+    assert _car_number(layout / "railroad.db") == "CURRENT"
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "Locomotive_Images/../railroad.db",
+        "Passenger_Images/../../outside",
+        "Other_Images/x.png",
+    ],
+)
+def test_picture_archive_rejects_unsafe_paths(layout, name):
+    archive = layout / "unsafe.zip"
+    with zipfile.ZipFile(archive, "w") as contents:
+        contents.write(layout / "railroad.db", "railroad.db")
+        contents.writestr(name, b"bad")
+    restored, message = DatabaseBackupService.restore_backup(archive)
+    assert not restored
+    assert "unsafe" in message
+    for folder in MANAGED_IMAGE_FOLDERS:
+        assert (layout / folder / "picture.png").read_bytes() == folder.encode()
 
 
 def test_automatic_backup_retention_preserves_manual_files(tmp_path):

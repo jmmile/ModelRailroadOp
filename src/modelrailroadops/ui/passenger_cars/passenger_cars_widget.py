@@ -32,6 +32,10 @@ from modelrailroadops.ui.passenger_cars.passenger_car_table_model import (
 from modelrailroadops.ui.styles import (
     TABLE_SELECTION_STYLE,
 )
+from modelrailroadops.services import passenger_image_service
+from modelrailroadops.ui.widgets.equipment_picture_preview import (
+    EquipmentPicturePreview, restore_equipment_selection,
+)
 
 
 class PassengerCarsWidget(QWidget):
@@ -218,6 +222,15 @@ class PassengerCarsWidget(QWidget):
         layout.addWidget(
             self.table
         )
+        self.picture_preview = EquipmentPicturePreview(
+            "Selected Passenger Car Picture", "passenger car",
+            passenger_image_service.find_image, self,
+        )
+        layout.addWidget(self.picture_preview)
+        self.table.selectionModel().selectionChanged.connect(self.update_picture)
+        self.proxy.modelReset.connect(self.update_picture)
+        self.proxy.rowsRemoved.connect(self.update_picture)
+        self.proxy.layoutChanged.connect(self.update_picture)
 
         #
         # Signals
@@ -289,10 +302,15 @@ class PassengerCarsWidget(QWidget):
         )
 
     def refresh(self):
-
+        selected = self.selected_passenger_car()
+        selected_id = selected.id if selected else None
         self.model.refresh()
 
         self.proxy.invalidate()
+        restore_equipment_selection(
+            self.table, self.proxy, self.model.get_passenger_car, selected_id
+        )
+        self.update_picture()
 
         self.table.resizeColumnsToContents()
 
@@ -301,6 +319,9 @@ class PassengerCarsWidget(QWidget):
         self.status_label.setText(
             f"{total} Passenger Cars"
         )
+
+    def update_picture(self, *_args):
+        self.picture_preview.show_equipment(self.selected_passenger_car())
 
     def selected_passenger_car(self):
 
