@@ -1,3 +1,6 @@
+from modelrailroadops.ui.operations.session_summary_dialog import SessionSummaryDialog
+from modelrailroadops.ui.operations.crew_packet_dialog import CrewPacketDialog
+
 from PySide6.QtGui import (
     QStandardItem,
     QStandardItemModel,
@@ -544,6 +547,10 @@ class OperationsSessionsWidget(QWidget):
         self.complete_button = QPushButton(
             "Complete Session"
         )
+        self.summary_button = QPushButton("End-of-Session Summary")
+        self.summary_button.clicked.connect(self.show_end_summary)
+        self.crew_packet_button = QPushButton("Crew Packet")
+        self.crew_packet_button.clicked.connect(self.show_crew_packet)
 
         self.cancel_button = QPushButton(
             "Cancel Session"
@@ -594,6 +601,11 @@ class OperationsSessionsWidget(QWidget):
         layout.addLayout(
             button_layout
         )
+        report_buttons = QHBoxLayout()
+        report_buttons.addWidget(self.summary_button)
+        report_buttons.addWidget(self.crew_packet_button)
+        report_buttons.addStretch()
+        layout.addLayout(report_buttons)
 
         #
         # Operations Sessions table
@@ -4603,6 +4615,16 @@ class OperationsSessionsWidget(QWidget):
         message.setStandardButtons(QMessageBox.Ok)
         message.exec()
 
+    def show_end_summary(self):
+        selected = self.get_selected_session()
+        if selected is not None:
+            SessionSummaryDialog(selected.id, self).exec()
+
+    def show_crew_packet(self):
+        selected = self.get_selected_session()
+        if selected is not None:
+            CrewPacketDialog(selected.id, self).exec()
+
     def complete_session(
         self,
     ):
@@ -4613,6 +4635,10 @@ class OperationsSessionsWidget(QWidget):
 
         if operations_session is None:
 
+            return
+
+        review = SessionSummaryDialog(operations_session.id, self, allow_complete=True)
+        if review.exec() != QDialog.Accepted:
             return
 
         answer = QMessageBox.question(

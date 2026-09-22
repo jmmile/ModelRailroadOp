@@ -9,6 +9,8 @@ __pycache__/
 build/
 dist/
 release/
+tmp/
+output/
 data/
 packaging/.obsidian/
 data/backups/

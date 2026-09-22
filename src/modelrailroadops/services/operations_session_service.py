@@ -21,6 +21,52 @@ class OperationsSessionService:
     """Create, retrieve, and manage Operations Sessions."""
 
     @staticmethod
+    def end_summary(session_id):
+        """Read-only review; movement totals are session-scoped, locations are live."""
+        with SessionLocal() as session:
+            record = session.get(OperationsSession, session_id)
+            if record is None:
+                raise ValueError("Operations Session was not found.")
+            moves = session.scalars(select(CarMove).where(
+                CarMove.operations_session_id == session_id
+            ).options(joinedload(CarMove.car), joinedload(CarMove.train))
+                .order_by(CarMove.train_id, CarMove.route_sequence, CarMove.id)).all()
+            waybills = session.scalars(select(Waybill).where(
+                Waybill.operations_session_id == session_id
+            ).options(joinedload(Waybill.car)).order_by(Waybill.id)).all()
+            rows = [{
+                "id": move.id, "train": move.train.symbol,
+                "car": f"{move.car.reporting_mark} {move.car.number}",
+                "type": move.move_type, "status": move.status,
+                "waybill": move.waybill_id,
+                "origin": move.origin_location or "—",
+                "destination": move.destination_location or "—",
+            } for move in moves]
+            cars = {move.car.id: move.car for move in moves}
+            cars.update({waybill.car.id: waybill.car for waybill in waybills})
+            aboard = [{"car": f"{car.reporting_mark} {car.number}",
+                       "location": car.location}
+                      for car in sorted(cars.values(), key=lambda c: (c.reporting_mark, c.number))
+                      if (car.location or "").startswith("On Train:")]
+            ready, reason = OperationsSessionService._validate_completion_readiness(session, session_id)
+            return {
+                "id": record.id, "name": record.name, "date": str(record.session_date),
+                "status": record.status,
+                "completed_at": str(record.completed_at or "—"),
+                "generated_at": datetime.now().isoformat(timespec="seconds"),
+                "moves": rows,
+                "pickups": sum(r["type"] == "PICKUP" and r["status"] == "COMPLETED" for r in rows),
+                "setouts": sum(r["type"] == "SETOUT" and r["status"] == "COMPLETED" for r in rows),
+                "pending": [r for r in rows if r["status"] != "COMPLETED"],
+                "aboard": aboard,
+                "unfinished_waybills": [{"id": w.id, "car": f"{w.car.reporting_mark} {w.car.number}",
+                                          "status": w.status}
+                                         for w in waybills if w.status not in ("COMPLETED", "CANCELLED")],
+                "ready": ready,
+                "readiness": "Ready under existing completion rules." if ready else str(reason),
+            }
+
+    @staticmethod
     def get_all():
         with SessionLocal() as session:
             return session.execute(
